@@ -69,16 +69,19 @@ export async function startRepl(options: ReplOptions = {}): Promise<void> {
   console.log(`\x1b[2mType /help for commands. Press Ctrl+D to exit.\x1b[0m\n`);
 
   log.info("Creating agent for REPL session");
-  const { agent, context } = createAppAgent(config, { cwd: workspaceRoot });
+  // Pass systemPrompt via sessionConfig so createAppAgent routes it
+  // to createDeepAgent's systemPrompt field, NOT as a user message.
+  const { agent, context } = createAppAgent(config, {
+    cwd: workspaceRoot,
+    systemPrompt,
+  });
 
   // Display available tools
   const toolNames = context.tools.map((t) => t.name);
   console.log(`\x1b[2mLoaded ${toolNames.length} tools: ${toolNames.join(", ")}\x1b[0m\n`);
 
   const history: ConversationTurn[] = [];
-  const messages: Array<{ role: "user" | "assistant"; content: string }> = [
-    { role: "user", content: systemPrompt },
-  ];
+  const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
 
   const rl = readline.createInterface({
     input: process.stdin,

@@ -36,15 +36,17 @@ export async function runOneShot(
   const systemPrompt = resolveSystemPrompt(options);
 
   log.info("Creating agent for one-shot prompt");
-  const { agent } = createAppAgent(config, { cwd: workspaceRoot });
-
-  const messages = [
-    { role: "user" as const, content: systemPrompt },
-    { role: "user" as const, content: prompt },
-  ];
+  // Pass systemPrompt via sessionConfig so createAppAgent routes it
+  // to createDeepAgent's systemPrompt field, NOT as a user message.
+  const { agent } = createAppAgent(config, {
+    cwd: workspaceRoot,
+    systemPrompt,
+  });
 
   try {
-    const response = await agent.invoke({ messages });
+    const response = await agent.invoke({
+      messages: [{ role: "user" as const, content: prompt }],
+    });
     const content = extractContent(response);
     console.log(content);
   } catch (err) {
