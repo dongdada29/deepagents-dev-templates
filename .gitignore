@@ -30,3 +30,4 @@ coverage/
 
 # Package artifacts
 *.tgz
+agent-package.release.json

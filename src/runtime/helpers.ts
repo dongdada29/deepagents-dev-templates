@@ -8,8 +8,9 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { type FilesystemPermission } from "deepagents";
+import { type CreateDeepAgentParams, type FilesystemPermission } from "deepagents";
 import type { StructuredTool } from "@langchain/core/tools";
+import { ChatAnthropic } from "@langchain/anthropic";
 import type { AppConfig, ACPSessionConfig } from "./config-loader.js";
 import { PlatformClient } from "./platform-client.js";
 import { MCPManager } from "./mcp-manager.js";
@@ -53,12 +54,13 @@ export function createRuntimeContext(
   // Platform is optional — only create PlatformClient if both IDs are set
   const hasPlatform = !!(agentId && spaceId);
   const platformClient = hasPlatform
-    ? new PlatformClient({
-        apiBaseUrl: config.platform.apiBaseUrl,
-        agentId,
-        spaceId,
-        authToken: process.env.PLATFORM_API_TOKEN,
-      })
+      ? new PlatformClient({
+          apiBaseUrl: config.platform.apiBaseUrl,
+          agentId,
+          spaceId,
+          authToken: process.env.PLATFORM_API_TOKEN,
+          endpoints: config.platform.endpoints,
+        })
     : null;
 
   if (!hasPlatform) {
@@ -102,11 +104,79 @@ export function createRuntimeContext(
   return { config, platformClient, mcpManager, variableManager, toolContext, tools };
 }
 
+/**
+ * Hydrate async runtime layers that depend on platform APIs.
+ *
+ * The custom MCP bridge holds a reference to the MCPManager, so it is safe to
+ * populate platform MCP config after tool objects are created and before the
+ * agent starts processing prompts.
+ */
+export async function hydrateRuntimeContext(context: RuntimeContext): Promise<RuntimeContext> {
+  const log = logger.child("runtime-context");
+  if (!context.platformClient) {
+    return context;
+  }
+
+  try {
+    const platformMcp = await context.platformClient.listMcpServers();
+    if (Object.keys(platformMcp.servers).length > 0) {
+      context.mcpManager.setPlatformConfig(platformMcp);
+      log.info("Hydrated platform MCP config", {
+        servers: Object.keys(platformMcp.servers),
+      });
+    }
+  } catch (err) {
+    log.warn("Failed to hydrate platform MCP config; continuing with default/session MCP only", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  return context;
+}
+
+export async function createRuntimeContextAsync(
+  config: AppConfig,
+  sessionConfig?: ACPSessionConfig
+): Promise<RuntimeContext> {
+  return await hydrateRuntimeContext(createRuntimeContext(config, sessionConfig));
+}
+
 // ─── Model ──────────────────────────────────────────────
 
 /** Build the model string deepagents expects: "provider:model-name" */
 export function resolveModelString(config: AppConfig): string {
   return `${config.model.provider}:${config.model.name}`;
+}
+
+// Cache the model instance to avoid redundant instantiation on repeated calls.
+let cachedModel: { key: string; instance: CreateDeepAgentParams["model"] } | null = null;
+
+/** Build the model instance/string accepted by deepagents. */
+export function resolveModel(config: AppConfig): CreateDeepAgentParams["model"] {
+  if (config.model.provider !== "anthropic") {
+    return resolveModelString(config);
+  }
+
+  const cacheKey = `${config.model.name}|${config.model.baseUrl ?? ""}|${config.model.settings.temperature}|${config.model.settings.maxTokens ?? ""}`;
+  if (cachedModel && cachedModel.key === cacheKey) {
+    return cachedModel.instance;
+  }
+
+  const apiKey =
+    process.env[config.model.authTokenEnv] ||
+    process.env[config.model.apiKeyEnv] ||
+    process.env.ANTHROPIC_AUTH_TOKEN ||
+    process.env.ANTHROPIC_API_KEY;
+
+  const instance = new ChatAnthropic({
+    model: config.model.name,
+    apiKey,
+    anthropicApiUrl: config.model.baseUrl,
+    temperature: config.model.settings.temperature,
+    maxTokens: config.model.settings.maxTokens,
+  });
+  cachedModel = { key: cacheKey, instance };
+  return instance;
 }
 
 // ─── System Prompt ──────────────────────────────────────
@@ -154,6 +224,33 @@ export function resolveSystemPrompt(
 - Target agent prompts come from ACP — never hardcode them
 - Save generated prompts via platform_api(operation: "save_prompt")
 `;
+}
+
+/**
+ * Resolve system prompt for CLI modes (REPL / one-shot).
+ * Priority: explicit text > custom file > default prompt file > generic fallback.
+ */
+export function resolveCliSystemPrompt(options: {
+  systemPrompt?: string;
+  promptPath?: string;
+}): string {
+  if (options.systemPrompt) {
+    return options.systemPrompt;
+  }
+
+  if (options.promptPath) {
+    const fullPath = resolve(process.cwd(), options.promptPath);
+    if (existsSync(fullPath)) {
+      return readFileSync(fullPath, "utf-8").replace(/^# .*\r?\n/, "").trim();
+    }
+  }
+
+  const defaultPath = resolve(process.cwd(), "prompts/developer-agent.system.md");
+  if (existsSync(defaultPath)) {
+    return readFileSync(defaultPath, "utf-8").replace(/^# .*\r?\n/, "").trim();
+  }
+
+  return "You are a helpful DeepAgent assistant. Be concise and action-oriented.";
 }
 
 // ─── Memory Files ───────────────────────────────────────
@@ -240,7 +337,7 @@ export function buildAgentConfigParts(
   tools: StructuredTool[]
 ) {
   return {
-    model: resolveModelString(config),
+    model: resolveModel(config),
     systemPrompt: resolveSystemPrompt(config, sessionConfig, workspaceRoot),
     tools,
     skills: resolveSkillsPaths(config),

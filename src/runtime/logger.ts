@@ -68,25 +68,25 @@ export class Logger {
 
   debug(message: string, context?: Record<string, unknown>): void {
     if (this.shouldLog("debug")) {
-      console.debug(this.formatMessage("debug", message, context));
+      process.stderr.write(`${this.formatMessage("debug", message, context)}\n`);
     }
   }
 
   info(message: string, context?: Record<string, unknown>): void {
     if (this.shouldLog("info")) {
-      console.info(this.formatMessage("info", message, context));
+      process.stderr.write(`${this.formatMessage("info", message, context)}\n`);
     }
   }
 
   warn(message: string, context?: Record<string, unknown>): void {
     if (this.shouldLog("warn")) {
-      console.warn(this.formatMessage("warn", message, context));
+      process.stderr.write(`${this.formatMessage("warn", message, context)}\n`);
     }
   }
 
   error(message: string, context?: Record<string, unknown>): void {
     if (this.shouldLog("error")) {
-      console.error(this.formatMessage("error", message, context));
+      process.stderr.write(`${this.formatMessage("error", message, context)}\n`);
     }
   }
 

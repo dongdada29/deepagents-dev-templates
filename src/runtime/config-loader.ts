@@ -17,6 +17,9 @@ import { logger } from "./logger.js";
 export const ModelConfigSchema = z.object({
   provider: z.string().default("anthropic"),
   name: z.string().default("claude-sonnet-4-6"),
+  baseUrl: z.string().url().optional(),
+  apiKeyEnv: z.string().default("ANTHROPIC_API_KEY"),
+  authTokenEnv: z.string().default("ANTHROPIC_AUTH_TOKEN"),
   settings: z
     .object({
       temperature: z.number().min(0).max(2).default(0),
@@ -34,6 +37,19 @@ export const PlatformConfigSchema = z.object({
   apiBaseUrl: z.string().url().default("https://api.nuwax.com"),
   agentId: z.string().default(""),
   spaceId: z.string().default(""),
+  endpoints: z.object({
+    savePrompt: z.object({ method: z.string().default("POST"), path: z.string().default("/api/agent/config/update") }).default({}),
+    queryPlugins: z.object({ method: z.string().default("GET"), path: z.string().default("/api/agent/component/search") }).default({}),
+    bindComponent: z.object({ method: z.string().default("POST"), path: z.string().default("/api/agent/component/add") }).default({}),
+    listComponents: z.object({ method: z.string().default("GET"), path: z.string().default("/api/agent/component/list/{agentId}") }).default({}),
+    createVariable: z.object({ method: z.string().default("POST"), path: z.string().default("/api/agent/variable/add") }).default({}),
+    updateVariable: z.object({ method: z.string().default("POST"), path: z.string().default("/api/agent/variable/update") }).default({}),
+    listVariables: z.object({ method: z.string().default("GET"), path: z.string().default("/api/agent/variable/list/{agentId}") }).default({}),
+    executePlugin: z.object({ method: z.string().default("POST"), path: z.string().default("/api/v1/plugin/{pluginId}/execute") }).default({}),
+    executeWorkflow: z.object({ method: z.string().default("POST"), path: z.string().default("/api/v1/workflow/{workflowId}/execute") }).default({}),
+    createDebugSession: z.object({ method: z.string().default("POST"), path: z.string().default("/api/agent/debug/session") }).default({}),
+    getDebugSession: z.object({ method: z.string().default("GET"), path: z.string().default("/api/agent/debug/session/{sessionId}") }).default({}),
+  }).default({}),
 });
 
 export const PermissionsConfigSchema = z.object({
@@ -90,6 +106,9 @@ const ENV_MAP: Record<string, string> = {
   PLATFORM_AGENT_ID: "platform.agentId",
   PLATFORM_SPACE_ID: "platform.spaceId",
   DEFAULT_MODEL: "model.name",
+  ANTHROPIC_MODEL: "model.name",
+  ANTHROPIC_BASE_URL: "model.baseUrl",
+  MCP_CONFIG_PATH: "mcp.configPath",
   LOG_LEVEL: "logging.level",
 };
 

@@ -7,8 +7,9 @@
 
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { createAppAgent } from "../runtime/agent-factory.js";
+import { createAppAgentAsync } from "../runtime/agent-factory.js";
 import { loadConfig } from "../runtime/config-loader.js";
+import { resolveCliSystemPrompt } from "../runtime/helpers.js";
 import { logger } from "../runtime/logger.js";
 
 const log = logger.child("one-shot");
@@ -33,12 +34,12 @@ export async function runOneShot(
 ): Promise<void> {
   const config = loadConfig({ configPath: options.configPath });
   const workspaceRoot = options.workspaceRoot || process.cwd();
-  const systemPrompt = resolveSystemPrompt(options);
+  const systemPrompt = resolveCliSystemPrompt(options);
 
   log.info("Creating agent for one-shot prompt");
   // Pass systemPrompt via sessionConfig so createAppAgent routes it
   // to createDeepAgent's systemPrompt field, NOT as a user message.
-  const { agent } = createAppAgent(config, {
+  const { agent } = await createAppAgentAsync(config, {
     cwd: workspaceRoot,
     systemPrompt,
   });
@@ -71,27 +72,7 @@ export async function runPromptFile(
   await runOneShot(prompt, options);
 }
 
-// ─── Helpers (shared with REPL) ─────────────────────────
-
-function resolveSystemPrompt(options: OneShotOptions): string {
-  if (options.systemPrompt) {
-    return options.systemPrompt;
-  }
-
-  if (options.promptPath) {
-    const fullPath = resolve(process.cwd(), options.promptPath);
-    if (existsSync(fullPath)) {
-      return readFileSync(fullPath, "utf-8").replace(/^# .*\r?\n/, "").trim();
-    }
-  }
-
-  const defaultPath = resolve(process.cwd(), "prompts/developer-agent.system.md");
-  if (existsSync(defaultPath)) {
-    return readFileSync(defaultPath, "utf-8").replace(/^# .*\r?\n/, "").trim();
-  }
-
-  return "You are a helpful DeepAgent assistant. Be concise and action-oriented.";
-}
+// ─── Helpers ───────────────────────────────────────────
 
 function extractContent(response: unknown): string {
   if (!response) return "(no response)";

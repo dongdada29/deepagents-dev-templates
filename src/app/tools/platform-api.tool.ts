@@ -67,9 +67,29 @@ export function createPlatformApiTool(platformClient: PlatformClient | null) {
             return JSON.stringify(result, null, 2);
           }
 
+          case "execute_workflow": {
+            const workflowId = typeof p.workflowId === "string" ? p.workflowId : null;
+            if (!workflowId) return "Error: 'workflowId' parameter must be a string";
+            const result = await platformClient.executeWorkflow(
+              workflowId,
+              (p.workflowParams as Record<string, unknown>) || {}
+            );
+            return JSON.stringify(result, null, 2);
+          }
+
           case "create_debug_session": {
             const model = typeof p.model === "string" ? p.model : undefined;
-            const session = await platformClient.createDebugSession({ model });
+            const mcpServers = p.mcpServers && typeof p.mcpServers === "object"
+              ? (p.mcpServers as Record<string, unknown>)
+              : undefined;
+            const session = await platformClient.createDebugSession({ model, mcpServers });
+            return JSON.stringify(session, null, 2);
+          }
+
+          case "get_debug_session": {
+            const sessionId = typeof p.sessionId === "string" ? p.sessionId : null;
+            if (!sessionId) return "Error: 'sessionId' parameter must be a string";
+            const session = await platformClient.getDebugSession(sessionId);
             return JSON.stringify(session, null, 2);
           }
 
@@ -90,7 +110,9 @@ Operations:
 - bind_component: Bind a platform component to the agent (params: { componentId, type?, config? })
 - list_components: List components bound to the agent (params: {})
 - execute_plugin: Execute a platform plugin (params: { pluginId, pluginParams? })
-- create_debug_session: Create a devMode debug session (params: { model? })
+- execute_workflow: Execute a platform workflow (params: { workflowId, workflowParams? })
+- create_debug_session: Create a devMode debug session (params: { model?, mcpServers? })
+- get_debug_session: Get debug session status (params: { sessionId })
 
 IMPORTANT: Before writing custom tool code, ALWAYS use query_plugins to check
 if the platform already provides the needed functionality.`,
@@ -102,7 +124,9 @@ if the platform already provides the needed functionality.`,
             "bind_component",
             "list_components",
             "execute_plugin",
+            "execute_workflow",
             "create_debug_session",
+            "get_debug_session",
           ])
           .describe("The platform API operation to perform"),
         params: z

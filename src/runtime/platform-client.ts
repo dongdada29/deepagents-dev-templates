@@ -7,6 +7,7 @@
  */
 
 import { logger } from "./logger.js";
+import type { MCPConfig, MCPServerConfig } from "./mcp-manager.js";
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -16,8 +17,27 @@ export interface PlatformClientOptions {
   spaceId: string;
   authToken?: string;
   authType?: "bearer" | "apikey";
+  endpoints?: Partial<Record<PlatformOperation, PlatformEndpoint>>;
   /** Request timeout in milliseconds (default: 30000) */
   timeout?: number;
+}
+
+export type PlatformOperation =
+  | "savePrompt"
+  | "queryPlugins"
+  | "bindComponent"
+  | "listComponents"
+  | "createVariable"
+  | "updateVariable"
+  | "listVariables"
+  | "executePlugin"
+  | "executeWorkflow"
+  | "createDebugSession"
+  | "getDebugSession";
+
+export interface PlatformEndpoint {
+  method: string;
+  path: string;
 }
 
 export interface PluginInfo {
@@ -52,6 +72,20 @@ export interface DebugSession {
 
 // ─── Client Implementation ──────────────────────────────
 
+const DEFAULT_ENDPOINTS: Record<PlatformOperation, PlatformEndpoint> = {
+  savePrompt: { method: "POST", path: "/api/agent/config/update" },
+  queryPlugins: { method: "GET", path: "/api/agent/component/search" },
+  bindComponent: { method: "POST", path: "/api/agent/component/add" },
+  listComponents: { method: "GET", path: "/api/agent/component/list/{agentId}" },
+  createVariable: { method: "POST", path: "/api/agent/variable/add" },
+  updateVariable: { method: "POST", path: "/api/agent/variable/update" },
+  listVariables: { method: "GET", path: "/api/agent/variable/list/{agentId}" },
+  executePlugin: { method: "POST", path: "/api/v1/plugin/{pluginId}/execute" },
+  executeWorkflow: { method: "POST", path: "/api/v1/workflow/{workflowId}/execute" },
+  createDebugSession: { method: "POST", path: "/api/agent/debug/session" },
+  getDebugSession: { method: "GET", path: "/api/agent/debug/session/{sessionId}" },
+};
+
 export class PlatformClient {
   private apiBaseUrl: string;
   private agentId: string;
@@ -59,6 +93,7 @@ export class PlatformClient {
   private authToken: string;
   private authType: "bearer" | "apikey";
   private timeout: number;
+  private endpoints: Record<PlatformOperation, PlatformEndpoint>;
   private log = logger.child("platform");
   private variablesCache: { data: AgentVariable[]; timestamp: number } | null = null;
   private readonly CACHE_TTL = 30_000; // 30 seconds
@@ -70,6 +105,7 @@ export class PlatformClient {
     this.authToken = options.authToken ?? process.env.PLATFORM_API_TOKEN ?? "";
     this.authType = options.authType ?? "bearer";
     this.timeout = options.timeout ?? 30_000;
+    this.endpoints = { ...DEFAULT_ENDPOINTS, ...options.endpoints };
   }
 
   // ─── HTTP Helpers ───────────────────────────────────
@@ -130,6 +166,25 @@ export class PlatformClient {
     }
   }
 
+  private endpoint(
+    operation: PlatformOperation,
+    params: Record<string, string> = {}
+  ): PlatformEndpoint {
+    const endpoint = this.endpoints[operation];
+    const replacements: Record<string, string> = {
+      agentId: this.agentId,
+      spaceId: this.spaceId,
+      ...params,
+    };
+
+    return {
+      method: endpoint.method.toUpperCase(),
+      path: endpoint.path.replace(/\{([a-zA-Z0-9_]+)\}/g, (_, key: string) =>
+        encodeURIComponent(replacements[key] ?? "")
+      ),
+    };
+  }
+
   // ─── Prompt Management ──────────────────────────────
 
   /**
@@ -143,7 +198,9 @@ export class PlatformClient {
       length: prompt.length,
     });
 
-    await this.request("PUT", `/api/agents/${this.agentId}/prompt`, {
+    const endpoint = this.endpoint("savePrompt");
+    await this.request(endpoint.method, endpoint.path, {
+      agentId: this.agentId,
       prompt,
       metadata: {
         ...metadata,
@@ -170,9 +227,14 @@ export class PlatformClient {
     if (options?.type) params.set("type", options.type);
     if (options?.limit) params.set("limit", String(options.limit));
 
+    const endpoint = this.endpoint("queryPlugins");
+    const path = endpoint.method === "GET"
+      ? `${endpoint.path}?${params.toString()}`
+      : endpoint.path;
     const result = await this.request<{ plugins: PluginInfo[] }>(
-      "GET",
-      `/api/spaces/${this.spaceId}/plugins?${params.toString()}`
+      endpoint.method,
+      path,
+      endpoint.method === "GET" ? undefined : { query, ...options, agentId: this.agentId, spaceId: this.spaceId }
     );
 
     return result.plugins;
@@ -189,18 +251,48 @@ export class PlatformClient {
       componentId: binding.componentId,
     });
 
-    await this.request("POST", `/api/agents/${this.agentId}/components`, binding);
+    const endpoint = this.endpoint("bindComponent");
+    await this.request(endpoint.method, endpoint.path, {
+      agentId: this.agentId,
+      spaceId: this.spaceId,
+      ...binding,
+    });
   }
 
   /**
    * List all components bound to the agent.
    */
   async listComponents(): Promise<ComponentBinding[]> {
+    const endpoint = this.endpoint("listComponents");
     const result = await this.request<{ components: ComponentBinding[] }>(
-      "GET",
-      `/api/agents/${this.agentId}/components`
+      endpoint.method,
+      endpoint.path
     );
     return result.components;
+  }
+
+  /**
+   * Read platform-bound MCP components and normalize them to the template MCP
+   * config shape. Platform payloads are allowed to be flexible so endpoint
+   * contracts can evolve without changing the agent runtime:
+   *
+   * - { type: "mcp", config: { command, args, env } }
+   * - { type: "mcp", config: { url, headers/env } }
+   * - { config: { mcpServer: { ... } } }
+   * - { config: { mcp: { servers: { name: { ... } } } } }
+   */
+  async listMcpServers(): Promise<MCPConfig> {
+    const components = await this.listComponents();
+    const servers: Record<string, MCPServerConfig> = {};
+
+    for (const component of components) {
+      const normalized = normalizeComponentMcpServers(component);
+      for (const [name, server] of Object.entries(normalized)) {
+        servers[name] = server;
+      }
+    }
+
+    return { servers };
   }
 
   // ─── Variable Management ────────────────────────────
@@ -218,10 +310,11 @@ export class PlatformClient {
       type: variable.type,
     });
 
+    const endpoint = this.endpoint("createVariable");
     const result = await this.request<AgentVariable>(
-      "POST",
-      `/api/agents/${this.agentId}/variables`,
-      variable
+      endpoint.method,
+      endpoint.path,
+      { agentId: this.agentId, ...variable }
     );
 
     // Invalidate cache since we added a new variable
@@ -238,10 +331,11 @@ export class PlatformClient {
   ): Promise<AgentVariable> {
     this.log.info("Updating agent variable", { variableId });
 
+    const endpoint = this.endpoint("updateVariable");
     const result = await this.request<AgentVariable>(
-      "PATCH",
-      `/api/agents/${this.agentId}/variables/${variableId}`,
-      { value }
+      endpoint.method,
+      endpoint.path,
+      { agentId: this.agentId, variableId, value }
     );
 
     // Invalidate cache since we modified a variable
@@ -258,9 +352,10 @@ export class PlatformClient {
       return this.variablesCache.data;
     }
 
+    const endpoint = this.endpoint("listVariables");
     const result = await this.request<{ variables: AgentVariable[] }>(
-      "GET",
-      `/api/agents/${this.agentId}/variables`
+      endpoint.method,
+      endpoint.path
     );
 
     this.variablesCache = { data: result.variables, timestamp: now };
@@ -286,10 +381,28 @@ export class PlatformClient {
   ): Promise<Record<string, unknown>> {
     this.log.info("Executing plugin", { pluginId });
 
+    const endpoint = this.endpoint("executePlugin", { pluginId });
     return await this.request<Record<string, unknown>>(
-      "POST",
-      `/api/plugins/${pluginId}/execute`,
-      { params }
+      endpoint.method,
+      endpoint.path,
+      { agentId: this.agentId, spaceId: this.spaceId, params }
+    );
+  }
+
+  /**
+   * Execute a platform workflow in the sandbox.
+   */
+  async executeWorkflow(
+    workflowId: string,
+    params: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    this.log.info("Executing workflow", { workflowId });
+
+    const endpoint = this.endpoint("executeWorkflow", { workflowId });
+    return await this.request<Record<string, unknown>>(
+      endpoint.method,
+      endpoint.path,
+      { agentId: this.agentId, spaceId: this.spaceId, params }
     );
   }
 
@@ -304,10 +417,11 @@ export class PlatformClient {
   }): Promise<DebugSession> {
     this.log.info("Creating debug session", { agentId: this.agentId });
 
+    const endpoint = this.endpoint("createDebugSession");
     return await this.request<DebugSession>(
-      "POST",
-      `/api/agents/${this.agentId}/debug-sessions`,
-      config
+      endpoint.method,
+      endpoint.path,
+      { agentId: this.agentId, spaceId: this.spaceId, ...config }
     );
   }
 
@@ -315,9 +429,105 @@ export class PlatformClient {
    * Get debug session status.
    */
   async getDebugSession(sessionId: string): Promise<DebugSession> {
+    const endpoint = this.endpoint("getDebugSession", { sessionId });
     return await this.request<DebugSession>(
-      "GET",
-      `/api/agents/${this.agentId}/debug-sessions/${sessionId}`
+      endpoint.method,
+      endpoint.path
     );
   }
+}
+
+function normalizeComponentMcpServers(
+  component: ComponentBinding
+): Record<string, MCPServerConfig> {
+  const config = component.config ?? {};
+  const result: Record<string, MCPServerConfig> = {};
+
+  const addServer = (name: string, candidate: unknown) => {
+    const server = normalizeMcpServer(candidate);
+    if (server) {
+      result[toServerName(name)] = server;
+    }
+  };
+
+  const mcp = config.mcp;
+  if (isRecord(mcp)) {
+    if (isRecord(mcp.servers)) {
+      for (const [name, server] of Object.entries(mcp.servers)) {
+        addServer(name, server);
+      }
+    } else {
+      addServer(component.componentId, mcp);
+    }
+  }
+
+  if (isRecord(config.mcpServer)) {
+    const name =
+      typeof config.name === "string"
+        ? config.name
+        : typeof config.serverName === "string"
+          ? config.serverName
+          : component.componentId;
+    addServer(name, config.mcpServer);
+  }
+
+  if (
+    component.type === "mcp" &&
+    (typeof config.command === "string" || typeof config.url === "string")
+  ) {
+    const name =
+      typeof config.name === "string"
+        ? config.name
+        : typeof config.serverName === "string"
+          ? config.serverName
+          : component.componentId;
+    addServer(name, config);
+  }
+
+  return result;
+}
+
+function normalizeMcpServer(candidate: unknown): MCPServerConfig | null {
+  if (!isRecord(candidate)) return null;
+
+  const command = typeof candidate.command === "string" ? candidate.command : undefined;
+  const url = typeof candidate.url === "string" ? candidate.url : undefined;
+  if (!command && !url) return null;
+
+  const server: MCPServerConfig = {};
+  if (command) server.command = command;
+  if (url) server.url = url;
+  if (Array.isArray(candidate.args)) {
+    server.args = candidate.args.filter((arg): arg is string => typeof arg === "string");
+  }
+  if (typeof candidate.description === "string") {
+    server.description = candidate.description;
+  }
+  if (isStringRecord(candidate.env)) {
+    server.env = candidate.env;
+  }
+  if (isRecord(candidate.auth)) {
+    const type = candidate.auth.type;
+    if (type === "env" || type === "header") {
+      server.auth = {
+        type,
+        var: typeof candidate.auth.var === "string" ? candidate.auth.var : undefined,
+        header: typeof candidate.auth.header === "string" ? candidate.auth.header : undefined,
+      };
+    }
+  }
+  return server;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every((v) => typeof v === "string");
+}
+
+function toServerName(value: string): string {
+  const normalized = value.trim().replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  return normalized || "platform-mcp";
 }

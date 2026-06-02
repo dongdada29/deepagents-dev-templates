@@ -2,9 +2,16 @@
  * Runtime Layer — Barrel Export
  */
 
-export { bootstrap, type ACPServerOptions } from "./acp-server.js";
+export {
+  bootstrap,
+  buildACPAgentConfig,
+  buildACPAgentConfigAsync,
+  loadSessionConfigFromEnv,
+  type ACPServerOptions,
+} from "./acp-server.js";
 export {
   createAppAgent,
+  createAppAgentAsync,
   type CreatedAgent,
 } from "./agent-factory.js";
 export {
@@ -37,7 +44,10 @@ export {
 } from "./variable-manager.js";
 export {
   createRuntimeContext,
+  createRuntimeContextAsync,
+  hydrateRuntimeContext,
   resolveModelString,
+  resolveCliSystemPrompt,
   resolveSystemPrompt,
   discoverMemoryFiles,
   resolveSkillsPaths,
@@ -45,4 +55,12 @@ export {
   buildInterruptOn,
   type RuntimeContext,
 } from "./helpers.js";
+export {
+  generateCodeGraph,
+  writeCodeGraph,
+  type CodeGraph,
+  type CodeGraphEdge,
+  type CodeGraphNode,
+  type CodeGraphNodeKind,
+} from "./code-graph.js";
 export { Logger, logger, type LogLevel } from "./logger.js";

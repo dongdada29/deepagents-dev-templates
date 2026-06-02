@@ -15,6 +15,7 @@ import type { AppConfig, ACPSessionConfig } from "./config-loader.js";
 import { logger } from "./logger.js";
 import {
   createRuntimeContext,
+  createRuntimeContextAsync,
   buildAgentConfigParts,
   resolveModelString,
   type RuntimeContext,
@@ -73,5 +74,39 @@ export function createAppAgent(
   });
   log.info("Deep agent created successfully");
 
+  return { agent, context, backend };
+}
+
+/**
+ * Async startup variant used by real CLI/ACP entrypoints.
+ * It hydrates platform-delivered MCP servers before the agent is created.
+ */
+export async function createAppAgentAsync(
+  config: AppConfig,
+  sessionConfig?: ACPSessionConfig
+): Promise<CreatedAgent> {
+  const log = logger.child("agent-factory");
+  const workspaceRoot = sessionConfig?.cwd || process.cwd();
+
+  log.info("Creating deep agent", {
+    name: config.agent.name,
+    model: resolveModelString(config),
+    workspaceRoot,
+  });
+
+  const context = await createRuntimeContextAsync(config, sessionConfig);
+  log.info("Custom tools ready", {
+    count: context.tools.length,
+    names: context.tools.map((t) => t.name),
+  });
+
+  const backend = new FilesystemBackend({ rootDir: workspaceRoot });
+  const agentConfig = buildAgentConfigParts(config, sessionConfig, workspaceRoot, context.tools);
+  const agent = createDeepAgent({
+    ...agentConfig,
+    backend,
+  });
+
+  log.info("Deep agent created successfully");
   return { agent, context, backend };
 }

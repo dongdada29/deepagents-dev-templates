@@ -21,8 +21,13 @@ npm install
 cp .env.example .env
 # 编辑 .env，至少设置一个:
 #   ANTHROPIC_API_KEY=sk-ant-...
+#   ANTHROPIC_AUTH_TOKEN=...
 # 或
 #   OPENAI_API_KEY=sk-...
+#
+# 可选:
+#   ANTHROPIC_MODEL=claude-...
+#   ANTHROPIC_BASE_URL=https://your-llm-proxy.example.com
 ```
 
 ### 3. 启动 REPL
@@ -65,6 +70,17 @@ you> 列出当前目录的所有 .ts 文件
 | **单次问答** | `npx tsx src/index.ts ask "你的问题"` | 一次性提问 |
 | **文件执行** | `npx tsx src/index.ts run prompt.md` | 从文件读取 prompt |
 | **ACP 服务器** | `npx tsx src/index.ts` | 给 nuwaclaw/Zed 客户端使用 |
+| **节点关系图** | `npx tsx src/index.ts graph` | 给 nuwaclaw 页面展示生成代码结构 |
+
+## 生成代码节点关系图
+
+```bash
+npm run graph
+# 或写入文件
+npx tsx src/index.ts graph .nuwaclaw-code-graph.json
+```
+
+输出 schema 是 `nuwaclaw.agent-code-graph.v1`，包含 runtime、tools、skills、prompts、config、distribution manifest 之间的节点和关系。
 
 ## REPL 内置命令
 
@@ -79,7 +95,7 @@ you> 列出当前目录的所有 .ts 文件
 
 ## 启用平台集成（可选）
 
-平台 API 提供变量管理、提示词保存、MCP 插件等功能。**完全可选** — 不配置也能正常运行 Agent（仅 `platform_api` 和 `agent_variable` 工具的部分操作不可用）。
+平台 API 提供变量管理、提示词保存、MCP 插件、workflow 执行和调试会话等功能。**完全可选** — 不配置也能正常运行 Agent（仅 `platform_api` 和 `agent_variable` 工具的部分操作不可用）。
 
 ### 配置平台凭据
 
@@ -104,7 +120,22 @@ PLATFORM_SPACE_ID=<your-space-id>
 }
 ```
 
+配置平台凭据后，启动 ACP/CLI 时会自动读取该 Agent 已绑定的平台组件，并把 MCP 组件注入到运行时 MCP manager。默认合并优先级是：
+
+```text
+ACP_SESSION_CONFIG_JSON.mcpServers > 平台绑定 MCP 组件 > config/mcp.default.json
+```
+
 ## 自定义配置
+
+### 从 nuwaclaw/ACP 启动级注入配置
+
+`deepagents-acp` 当前公开 API 还没有通用 per-session metadata hook。本模板支持通过启动环境变量注入 ACP/platform session 配置：
+
+```bash
+ACP_SESSION_CONFIG_JSON='{"model":"claude-sonnet-4-6","agentId":"agent-id","spaceId":"space-id","systemPrompt":"...","mcpServers":{"context7":{"command":"npx","args":["-y","@upstash/context7-mcp"]}}}' \
+npx tsx src/index.ts
+```
 
 ### 使用自定义配置文件
 
@@ -127,7 +158,7 @@ npx tsx src/index.ts chat --debug
 ## 常见问题
 
 **Q: 启动时报 "未设置 API key" 警告？**
-A: 在 `.env` 中设置 `ANTHROPIC_API_KEY` 或 `OPENAI_API_KEY`。
+A: 在 `.env` 中设置 `ANTHROPIC_API_KEY`、`ANTHROPIC_AUTH_TOKEN` 或 `OPENAI_API_KEY`。
 
 **Q: Agent 无法调用 LLM？**
 A: 检查 API key 是否正确、网络是否可达。设置 `--debug` 查看详细日志。

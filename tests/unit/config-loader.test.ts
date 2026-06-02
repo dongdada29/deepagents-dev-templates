@@ -16,10 +16,14 @@ describe("config-loader", () => {
     tmpDir = mkdtempSync(join(tmpdir(), "config-loader-test-"));
     // Clear relevant env vars
     delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_MODEL;
+    delete process.env.ANTHROPIC_BASE_URL;
+    delete process.env.ANTHROPIC_AUTH_TOKEN;
     delete process.env.ACP_AGENT_NAME;
     delete process.env.PLATFORM_API_BASE_URL;
     delete process.env.PLATFORM_AGENT_ID;
     delete process.env.PLATFORM_SPACE_ID;
+    delete process.env.MCP_CONFIG_PATH;
     delete process.env.LOG_LEVEL;
     delete process.env.ACP_DEBUG;
   });
@@ -63,6 +67,18 @@ describe("config-loader", () => {
     expect(config.agent.name).toBe("env-agent");
   });
 
+  it("maps Anthropic model env vars used by real deployments", async () => {
+    process.env.ANTHROPIC_MODEL = "claude-real-env-model";
+    process.env.ANTHROPIC_BASE_URL = "https://llm-proxy.example.com";
+
+    const { loadConfig } = await import("../../src/runtime/config-loader.js");
+    const config = loadConfig({ configPath: "/nonexistent.json" });
+
+    expect(config.model.provider).toBe("anthropic");
+    expect(config.model.name).toBe("claude-real-env-model");
+    expect(config.model.baseUrl).toBe("https://llm-proxy.example.com");
+  });
+
   it("session config overrides env vars", async () => {
     process.env.ACP_AGENT_NAME = "env-agent";
     const { loadConfig } = await import("../../src/runtime/config-loader.js");
@@ -103,6 +119,13 @@ describe("config-loader", () => {
     const { loadConfig } = await import("../../src/runtime/config-loader.js");
     const config = loadConfig();
     expect(config.logging.level).toBe("warn");
+  });
+
+  it("MCP_CONFIG_PATH env var sets the default MCP config path", async () => {
+    process.env.MCP_CONFIG_PATH = "./config/mcp.custom.json";
+    const { loadConfig } = await import("../../src/runtime/config-loader.js");
+    const config = loadConfig();
+    expect(config.mcp.configPath).toBe("./config/mcp.custom.json");
   });
 
   it("platform URLs default to Nuwax", async () => {

@@ -11,19 +11,47 @@
     "version": "0.1.0"
   },
 
+  "alternativeSources": [
+    {
+      "type": "tgz",
+      "path": "./deepagents-dev-templates-0.1.0.tgz",
+      "version": "0.1.0"
+    },
+    {
+      "type": "git",
+      "url": "https://github.com/nuwax-ai/deepagents-dev-templates.git",
+      "ref": "v0.1.0"
+    }
+  ],
+
   "bin": {
-    "start": "dist/index.js"
+    "start": "dist/index.js",
+    "graph": "dist/index.js graph"
+  },
+
+  "graph": {
+    "schema": "nuwaclaw.agent-code-graph.v1",
+    "command": "node dist/index.js graph",
+    "description": "Generates the code node relationship graph for nuwaclaw UI rendering."
   },
 
   "env": {
-    "required": [
-      "ANTHROPIC_API_KEY"
-    ],
+    "required": [],
     "optional": [
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_MODEL",
+      "ANTHROPIC_BASE_URL",
+      "ANTHROPIC_AUTH_TOKEN",
       "OPENAI_API_KEY",
       "PLATFORM_API_TOKEN",
       "PLATFORM_AGENT_ID",
-      "PLATFORM_SPACE_ID"
+      "PLATFORM_SPACE_ID",
+      "ACP_SESSION_CONFIG_JSON"
+    ],
+    "oneOfRequired": [
+      ["ANTHROPIC_API_KEY"],
+      ["ANTHROPIC_AUTH_TOKEN"],
+      ["OPENAI_API_KEY"]
     ]
   },
 

@@ -5,6 +5,7 @@ set -euo pipefail
 VERSION=${1:-$(node -p "require('./agent-package.json').version")}
 NAME=$(node -p "require('./agent-package.json').name")
 TARBALL="${NAME}-${VERSION}.tgz"
+NPM_CACHE=${NPM_CONFIG_CACHE:-${TMPDIR:-/tmp}/deepagents-dev-templates-npm-cache}
 
 echo "📦 Packaging ${NAME} v${VERSION}..."
 
@@ -20,7 +21,7 @@ echo "  ✅ All tests passed"
 # Create tarball
 echo ""
 echo "📋 Creating distribution package..."
-npm pack --pack-destination .
+npm --cache "$NPM_CACHE" pack --pack-destination .
 ACTUAL_TARBALL=$(ls -t *.tgz 2>/dev/null | head -1)
 
 if [ -z "$ACTUAL_TARBALL" ]; then
@@ -33,14 +34,20 @@ CHECKSUM=$(shasum -a 256 "$ACTUAL_TARBALL" | cut -d' ' -f1)
 echo "  ✅ Created: $ACTUAL_TARBALL"
 echo "  ✅ SHA256:  $CHECKSUM"
 
-# Update agent-package.json checksum
+# Write a release manifest next to the tarball. The source manifest remains
+# stable in git; the release manifest carries the tarball checksum.
 node -e "
   const pkg = require('./agent-package.json');
   pkg.checksum.value = '$CHECKSUM';
   pkg.version = '$VERSION';
-  require('fs').writeFileSync('./agent-package.json', JSON.stringify(pkg, null, 2) + '\n');
+  pkg.source = {
+    type: 'tgz',
+    path: './$ACTUAL_TARBALL',
+    version: '$VERSION'
+  };
+  require('fs').writeFileSync('./agent-package.release.json', JSON.stringify(pkg, null, 2) + '\n');
 "
-echo "  ✅ Updated agent-package.json checksum"
+echo "  ✅ Wrote agent-package.release.json"
 
 echo ""
 echo "✅ Package ready: $ACTUAL_TARBALL"

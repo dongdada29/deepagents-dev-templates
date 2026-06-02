@@ -13,7 +13,7 @@ V1 交付一个 JS/TS Starter Repo，用来生成具体场景的 ACP 应用 Agen
 │            connects via stdio ACP protocol                │
 ├──────────────────────────────────────────────────────────┤
 │        DeepAgentsServer (deepagents-acp v0.1.12)         │
-│  session mgmt / tool streaming / model switching          │
+│  session mgmt / tool streaming / permissions              │
 ├──────────────────────────────────────────────────────────┤
 │        createDeepAgent() (deepagents v1.10.2)            │
 │  LangGraph runtime / middleware / subagents               │
@@ -72,7 +72,7 @@ V1 交付一个 JS/TS Starter Repo，用来生成具体场景的 ACP 应用 Agen
 | Skills | SKILL.md + YAML frontmatter | deepagents 原生 skills 参数加载 |
 | Filesystem | FilesystemBackend | deepagents 原生 backend，rootDir 绑定 |
 | Permissions | FilesystemPermission[] | deepagents 原生权限系统，deny/allow |
-| Config priority | ACP > env > config file > defaults | pydantic-deepagents CLI 模式 |
+| Config priority | ACP/session startup config > env > config file > defaults | pydantic-deepagents CLI 模式 |
 | Tool priority | Platform MCP > Built-in > deepagents > Write code | 用户要求 |
 | Prompt source | ACP only | 用户要求，不硬编码 |
 | Variable mgmt | AI 创建 → 用户填写 | 用户要求 |
@@ -89,7 +89,6 @@ src/
 │   ├── platform-client.ts     # Nuwax API client
 │   ├── mcp-manager.ts         # MCP merge (session > platform > defaults)
 │   ├── variable-manager.ts    # Agent variable management
-│   ├── permission-gate.ts     # Tool permission checking
 │   ├── logger.ts              # Structured logging
 │   └── index.ts
 ├── app/                        # AI + User editable
@@ -118,10 +117,13 @@ agent-package.json              # Distribution manifest
 ```
 
 ## Test Plan
-- 单元测试：config-loader, mcp-manager, variable-manager, permission-gate
-- ACP smoke test：DeepAgentsServer 启动 → session → prompt → response
-- 工具测试：每个 tool() 工具的 handler 正确性
-- 集成测试：完整 bootstrap() 流程
+- 单元测试：config-loader, mcp-manager, variable-manager, platform-client
+- 工具测试：MCP bridge stdio call, platform endpoint routing, platform debug session create/status, platform-bound MCP hydration
+- 图谱测试：generated-code node relationship graph
+- Manifest 测试：agent-package/template manifest 的 nuwaclaw engine contract
+- ACP smoke test：stdio initialize/session-new, agent config build, session prompt/model/MCP injection
+- 构建验收：typecheck, lint, build, package
+- 后续集成测试：nuwaclaw client 真实 ACP session → prompt → platform debug session
 
 ## Current Status
 - ✅ Project scaffolding
@@ -130,8 +132,28 @@ agent-package.json              # Distribution manifest
 - ✅ Skills (15 SKILL.md files)
 - ✅ Prompts + template.manifest.json + agent-package.json
 - ✅ TypeScript compiles clean (0 errors)
-- ✅ Runtime verification (createDeepAgent + DeepAgentsServer 端到端)
-- ⬜ Unit tests
-- ⬜ ACP smoke tests
-- ⬜ Integration tests
-- ⬜ Nuwax API 实际接口对接（需 API 文档）
+- ✅ Unit tests (config-loader, mcp-manager, variable-manager, platform-client)
+- ✅ Tool tests (MCP bridge stdio call)
+- ✅ Platform debug session tool/client tests (create + status)
+- ✅ Platform-bound MCP components hydrate into MCPManager during ACP/CLI startup
+- ✅ nuwaclaw engine integration contract doc + manifest contract tests
+- ✅ Code graph generation for nuwaclaw UI (`npm run graph`)
+- ✅ ACP stdio smoke tests (initialize + session/new without invoking LLM)
+- ✅ ACP config smoke tests (session prompt/model/MCP startup injection)
+- ✅ Package flow (`npm run package`) generates `.tgz` + `agent-package.release.json`
+- ✅ npm/tgz/git distribution surfaces in `agent-package.json`
+- ✅ Runtime verification (`node dist/index.js --help`)
+- ⬜ Full nuwaclaw UI ACP prompt/debug integration test
+- ⬜ Nuwax API production endpoint validation with real platform docs/environment
+
+## Reference Notes
+
+See `docs/template-capabilities.md` for:
+
+- default built-in tools
+- default built-in skills
+- config-delivered capabilities
+- `/Users/apple/workspace/pydantic-deepagents` reference evaluation
+- current `deepagents-acp` startup-level session config boundary
+
+See `docs/nuwaclaw-engine-integration.md` for the nuwaclaw package, ACP launch, startup config, MCP hydration, debug, and graph contracts.

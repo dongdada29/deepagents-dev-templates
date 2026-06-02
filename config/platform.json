@@ -3,12 +3,17 @@
   "agentId": "",
   "spaceId": "",
   "endpoints": {
-    "savePrompt": "/api/agents/{agentId}/prompt",
-    "queryPlugins": "/api/spaces/{spaceId}/plugins",
-    "bindComponent": "/api/agents/{agentId}/components",
-    "variables": "/api/agents/{agentId}/variables",
-    "executePlugin": "/api/plugins/{pluginId}/execute",
-    "debugSession": "/api/agents/{agentId}/debug-sessions"
+    "savePrompt": { "method": "POST", "path": "/api/agent/config/update" },
+    "queryPlugins": { "method": "GET", "path": "/api/agent/component/search" },
+    "bindComponent": { "method": "POST", "path": "/api/agent/component/add" },
+    "listComponents": { "method": "GET", "path": "/api/agent/component/list/{agentId}" },
+    "createVariable": { "method": "POST", "path": "/api/agent/variable/add" },
+    "updateVariable": { "method": "POST", "path": "/api/agent/variable/update" },
+    "listVariables": { "method": "GET", "path": "/api/agent/variable/list/{agentId}" },
+    "executePlugin": { "method": "POST", "path": "/api/v1/plugin/{pluginId}/execute" },
+    "executeWorkflow": { "method": "POST", "path": "/api/v1/workflow/{workflowId}/execute" },
+    "createDebugSession": { "method": "POST", "path": "/api/agent/debug/session" },
+    "getDebugSession": { "method": "GET", "path": "/api/agent/debug/session/{sessionId}" }
   },
   "auth": {
     "type": "bearer",

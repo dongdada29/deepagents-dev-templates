@@ -15,10 +15,11 @@
  */
 
 import * as readline from "node:readline";
-import { writeFileSync, existsSync, readFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { createAppAgent } from "../runtime/agent-factory.js";
+import { createAppAgentAsync } from "../runtime/agent-factory.js";
 import { loadConfig } from "../runtime/config-loader.js";
+import { resolveCliSystemPrompt } from "../runtime/helpers.js";
 import { logger } from "../runtime/logger.js";
 
 const log = logger.child("repl");
@@ -58,7 +59,7 @@ export async function startRepl(options: ReplOptions = {}): Promise<void> {
   const workspaceRoot = options.workspaceRoot || process.cwd();
 
   // Resolve system prompt (CLI > file > config defaults)
-  const systemPrompt = resolveReplSystemPrompt(options);
+  const systemPrompt = resolveCliSystemPrompt(options);
 
   console.log("\n\x1b[36m╔════════════════════════════════════════╗");
   console.log("║   DeepAgents Interactive REPL          ║");
@@ -71,7 +72,7 @@ export async function startRepl(options: ReplOptions = {}): Promise<void> {
   log.info("Creating agent for REPL session");
   // Pass systemPrompt via sessionConfig so createAppAgent routes it
   // to createDeepAgent's systemPrompt field, NOT as a user message.
-  const { agent, context } = createAppAgent(config, {
+  const { agent, context } = await createAppAgentAsync(config, {
     cwd: workspaceRoot,
     systemPrompt,
   });
@@ -227,32 +228,6 @@ async function handleCommand(
   }
 }
 
-/**
- * Resolve the system prompt for REPL mode.
- * Priority: --system-prompt flag > --prompt-file path > prompts/developer-agent.system.md
- */
-function resolveReplSystemPrompt(options: ReplOptions): string {
-  if (options.systemPrompt) {
-    return options.systemPrompt;
-  }
-
-  if (options.promptPath) {
-    const fullPath = resolve(process.cwd(), options.promptPath);
-    if (existsSync(fullPath)) {
-      const content = readFileSync(fullPath, "utf-8");
-      return content.replace(/^# .*\r?\n/, "").trim();
-    }
-  }
-
-  // Try the default prompts directory
-  const defaultPath = resolve(process.cwd(), "prompts/developer-agent.system.md");
-  if (existsSync(defaultPath)) {
-    const content = readFileSync(defaultPath, "utf-8");
-    return content.replace(/^# .*\r?\n/, "").trim();
-  }
-
-  return "You are a helpful DeepAgent assistant. Be concise and action-oriented.";
-}
 
 /**
  * Extract text content from an agent invoke response.

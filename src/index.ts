@@ -9,6 +9,7 @@
  *   chat                Start interactive REPL in the terminal
  *   ask "<prompt>"     One-shot prompt
  *   run <file>          Run prompt from a file
+ *   graph [output]      Generate code relationship graph JSON
  *   --help              Show usage
  *
  * Common flags:
@@ -22,14 +23,34 @@
  *   npx tsx src/index.ts chat --debug           # Start REPL with debug logging
  *   npx tsx src/index.ts ask "print hello world" # One-shot prompt
  *   npx tsx src/index.ts run prompt.md          # Run prompt from file
+ *   npx tsx src/index.ts graph graph.json       # Generate code graph
  */
 
 import { config as loadDotenv } from "dotenv";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import { bootstrap } from "./runtime/index.js";
+import { generateCodeGraph, writeCodeGraph } from "./runtime/code-graph.js";
 import { startRepl } from "./cli/repl.js";
 import { runOneShot, runPromptFile } from "./cli/one-shot.js";
 
-loadDotenv();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = resolve(__dirname, "..");
+
+// ACP mode: clean ALL model env vars from the shell environment.
+// Shell values are almost always stale leftovers from Claude Desktop or other tools.
+// After cleanup, either Zed's env block (if passed) or .env fallback will provide
+// the correct credentials.
+const isAcpMode = process.argv.slice(2).length === 0 || process.argv.slice(2)[0] === "acp";
+if (isAcpMode) {
+  for (const key of ["ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_MODEL"]) {
+    delete process.env[key];
+  }
+}
+
+// NOTE: loadDotenv() is called inside main() — only for CLI modes (chat/ask/run/graph).
+// In ACP mode (default), the host (Zed/JetBrains) provides env vars; loading .env
+// would shadow them with stale local values.
 
 interface ParsedArgs {
   command: string;
@@ -98,6 +119,10 @@ function parseArgs(argv: string[]): ParsedArgs {
     args.command = "run";
     args.acp = false;
     args.commandArg = positional[1];
+  } else if (first === "graph") {
+    args.command = "graph";
+    args.acp = false;
+    args.commandArg = positional[1];
   } else if (first === undefined) {
     // No command → default ACP
   } else {
@@ -122,6 +147,7 @@ DeepAgents Dev Templates — Multi-mode Entry Point
   chat                   启动交互式 REPL（终端对话模式）
   ask "<prompt>"         单次提问并打印回答
   run <file>             从文件读取 prompt 并执行
+  graph [output.json]    生成代码节点关系图 JSON
 
 标志:
   --debug                启用 debug 级别日志
@@ -136,6 +162,7 @@ DeepAgents Dev Templates — Multi-mode Entry Point
   npx tsx src/index.ts chat --debug           # REPL 调试模式
   npx tsx src/index.ts ask "hello world"      # 单次问答
   npx tsx src/index.ts run prompt.md          # 从文件运行
+  npx tsx src/index.ts graph                  # 输出节点关系图 JSON
 `;
 
 async function main(): Promise<void> {
@@ -146,13 +173,20 @@ async function main(): Promise<void> {
     return;
   }
 
+  // In ACP mode, load .env as fallback (shell vars were cleaned above).
+  // If Zed passes env vars, they'll be in process.env BEFORE loadDotenv,
+  // and dotenv won't overwrite them.
+  if (!args.acp || (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN && !process.env.OPENAI_API_KEY)) {
+    loadDotenv({ path: resolve(PROJECT_ROOT, ".env") });
+  }
+
   if (args.debug) {
     process.env.LOG_LEVEL = "debug";
   }
 
   // Check for required API key
-  if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
-    console.warn("\x1b[33m⚠️  警告: 未设置 ANTHROPIC_API_KEY 或 OPENAI_API_KEY\x1b[0m");
+  if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN && !process.env.OPENAI_API_KEY) {
+    console.warn("\x1b[33m⚠️  警告: 未设置 ANTHROPIC_API_KEY、ANTHROPIC_AUTH_TOKEN 或 OPENAI_API_KEY\x1b[0m");
     console.warn("\x1b[33m   Agent 将无法调用 LLM。请在 .env 文件中设置至少一个。\x1b[0m\n");
   }
 
@@ -188,6 +222,15 @@ async function main(): Promise<void> {
           process.exit(1);
         }
         await runPromptFile(args.commandArg, cliOptions);
+        break;
+
+      case "graph":
+        if (args.commandArg) {
+          writeCodeGraph(args.commandArg);
+          console.log(`Code graph written to ${args.commandArg}`);
+        } else {
+          console.log(JSON.stringify(generateCodeGraph(), null, 2));
+        }
         break;
     }
   } catch (error) {
