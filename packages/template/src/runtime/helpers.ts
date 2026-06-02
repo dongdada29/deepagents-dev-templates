@@ -20,6 +20,7 @@ import { createTools, type ToolContext } from "../app/tools/index.js";
 import { logger } from "./logger.js";
 import { createStuckLoopMiddleware } from "./middleware/stuck-loop.js";
 import { createPeriodicReminderMiddleware } from "./middleware/periodic-reminder.js";
+import { createCostTrackingMiddleware } from "./middleware/cost-tracking.js";
 
 // ─── Runtime Context ────────────────────────────────────
 
@@ -200,14 +201,14 @@ export function resolveSystemPrompt(
 
   // Try loading from prompts/developer-agent.system.md
   const promptPath = resolve(workspaceRoot, "prompts/developer-agent.system.md");
+  let basePrompt: string;
   if (existsSync(promptPath)) {
     const content = readFileSync(promptPath, "utf-8");
     // Strip the H1 title line (metadata, not prompt content)
-    return content.replace(/^# .*\r?\n/, "").trim();
-  }
-
-  // Inline fallback
-  return `You are ${config.agent.name} — an AI application agent.
+    basePrompt = content.replace(/^# .*\r?\n/, "").trim();
+  } else {
+    // Inline fallback
+    basePrompt = `You are ${config.agent.name} — an AI application agent.
 
 ## Workflow
 1. Research — understand the task and check available tools
@@ -227,6 +228,11 @@ export function resolveSystemPrompt(
 - Target agent prompts come from ACP — never hardcode them
 - Save generated prompts via platform_api(operation: "save_prompt")
 `;
+  }
+
+  // Append output style if configured
+  const style = resolveOutputStyle(config.agent.outputStyle, workspaceRoot);
+  return style ? `${basePrompt}\n\n${style}` : basePrompt;
 }
 
 /**
@@ -254,6 +260,22 @@ export function resolveCliSystemPrompt(options: {
   }
 
   return "You are a helpful DeepAgent assistant. Be concise and action-oriented.";
+}
+
+// ─── Output Styles ──────────────────────────────────────
+
+/**
+ * Load an output style file from prompts/styles/{name}.md.
+ * Returns the style content (without frontmatter) or empty string if not found.
+ */
+export function resolveOutputStyle(styleName: string, workspaceRoot: string): string {
+  const stylePath = resolve(workspaceRoot, "prompts/styles", `${styleName}.md`);
+  if (!existsSync(stylePath)) {
+    return "";
+  }
+  const content = readFileSync(stylePath, "utf-8");
+  // Strip YAML frontmatter
+  return content.replace(/^---\n[\s\S]*?\n---\n?/, "").trim();
 }
 
 // ─── Memory Files ───────────────────────────────────────
@@ -374,6 +396,12 @@ export function buildAgentConfigParts(
     middleware.push(createPeriodicReminderMiddleware({
       firstAt: mwConfig.periodicReminder.firstAt,
       every: mwConfig.periodicReminder.every,
+    }));
+  }
+
+  if (mwConfig.costTracking.enabled) {
+    middleware.push(createCostTrackingMiddleware({
+      warnAtTokens: mwConfig.costTracking.warnAtTokens,
     }));
   }
 

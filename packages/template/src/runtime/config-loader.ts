@@ -79,6 +79,7 @@ export const AppConfigSchema = z.object({
     name: z.string().default("deepagents-app-agent"),
     description: z.string().default("AI application agent"),
     version: z.string().default("0.1.0"),
+    outputStyle: z.string().default("concise"),
   }).default({}),
   model: ModelConfigSchema.default({}),
   mcp: MCPConfigSchema.default({}),
@@ -97,6 +98,10 @@ export const AppConfigSchema = z.object({
       enabled: z.boolean().default(true),
       firstAt: z.number().min(1).default(5),
       every: z.number().min(1).default(10),
+    }).default({}),
+    costTracking: z.object({
+      enabled: z.boolean().default(true),
+      warnAtTokens: z.number().min(1000).default(100_000),
     }).default({}),
   }).default({}),
 });
