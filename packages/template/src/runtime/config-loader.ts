@@ -86,6 +86,18 @@ export const AppConfigSchema = z.object({
   skills: SkillsConfigSchema.default({}),
   memory: MemoryConfigSchema.default({}),
   logging: LoggingConfigSchema.default({}),
+  middleware: z.object({
+    stuckLoopDetection: z.object({
+      enabled: z.boolean().default(true),
+      threshold: z.number().min(2).max(10).default(3),
+      mode: z.enum(["warn", "error"]).default("warn"),
+    }).default({}),
+    periodicReminder: z.object({
+      enabled: z.boolean().default(true),
+      firstAt: z.number().min(1).default(5),
+      every: z.number().min(1).default(10),
+    }).default({}),
+  }).default({}),
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;

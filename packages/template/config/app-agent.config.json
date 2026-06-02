@@ -37,5 +37,17 @@
   "logging": {
     "level": "info",
     "structured": true
+  },
+  "middleware": {
+    "stuckLoopDetection": {
+      "enabled": true,
+      "threshold": 3,
+      "mode": "warn"
+    },
+    "periodicReminder": {
+      "enabled": true,
+      "firstAt": 5,
+      "every": 10
+    }
   }
 }

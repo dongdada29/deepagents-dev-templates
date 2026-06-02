@@ -17,6 +17,8 @@ import { MCPManager } from "./mcp-manager.js";
 import { VariableManager } from "./variable-manager.js";
 import { createTools, type ToolContext } from "../app/tools/index.js";
 import { logger } from "./logger.js";
+import { createStuckLoopMiddleware } from "./middleware/stuck-loop.js";
+import { createPeriodicReminderMiddleware } from "./middleware/periodic-reminder.js";
 
 // ─── Runtime Context ────────────────────────────────────
 
@@ -260,7 +262,11 @@ export function resolveCliSystemPrompt(options: {
  * These are loaded by deepagents' memory system into the system prompt.
  */
 export function discoverMemoryFiles(workspaceRoot: string): string[] {
-  const candidates = ["AGENTS.md", "CLAUDE.md", ".deepagents/AGENTS.md"];
+  const candidates = [
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".deepagents/agent.md",   // deepagents standard path
+  ];
   const found: string[] = [];
   for (const candidate of candidates) {
     if (existsSync(resolve(workspaceRoot, candidate))) {
@@ -336,6 +342,25 @@ export function buildAgentConfigParts(
   workspaceRoot: string,
   tools: StructuredTool[]
 ) {
+  // Build custom middleware array from config
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const middleware: any[] = [];
+  const mwConfig = config.middleware;
+
+  if (mwConfig.stuckLoopDetection.enabled) {
+    middleware.push(createStuckLoopMiddleware({
+      threshold: mwConfig.stuckLoopDetection.threshold,
+      mode: mwConfig.stuckLoopDetection.mode,
+    }));
+  }
+
+  if (mwConfig.periodicReminder.enabled) {
+    middleware.push(createPeriodicReminderMiddleware({
+      firstAt: mwConfig.periodicReminder.firstAt,
+      every: mwConfig.periodicReminder.every,
+    }));
+  }
+
   return {
     model: resolveModel(config),
     systemPrompt: resolveSystemPrompt(config, sessionConfig, workspaceRoot),
@@ -346,5 +371,7 @@ export function buildAgentConfigParts(
       : undefined,
     permissions: buildPermissions(config),
     interruptOn: buildInterruptOn(config.permissions.interruptOn),
+    checkpointer: true,  // Enable LangGraph checkpointing for HITL + session persistence
+    middleware,
   };
 }
