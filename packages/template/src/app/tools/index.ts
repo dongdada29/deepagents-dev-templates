@@ -13,6 +13,8 @@ import type { StructuredTool } from "@langchain/core/tools";
 import { httpRequestTool } from "./http-request.tool.js";
 import { jsonUtilsTool } from "./json-utils.tool.js";
 import { agentMemoryTool } from "./agent-memory.tool.js";
+import { conversationHistoryTool } from "./conversation-history.tool.js";
+import { checkpointTool } from "./checkpoint.tool.js";
 import { createPlatformApiTool } from "./platform-api.tool.js";
 import { createAgentVariableTool } from "./agent-variable.tool.js";
 import { createMcpBridgeTool } from "./mcp-bridge.tool.js";
@@ -38,6 +40,8 @@ export function createTools(ctx: ToolContext): StructuredTool[] {
     httpRequestTool,
     jsonUtilsTool,
     agentMemoryTool,
+    conversationHistoryTool,
+    checkpointTool,
 
     // Platform-bound tools (created with live context)
     createPlatformApiTool(ctx.platformClient),
