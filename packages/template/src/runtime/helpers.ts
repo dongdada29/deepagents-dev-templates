@@ -6,8 +6,8 @@
  * for agent configuration building.
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { resolve, join } from "node:path";
 import { type CreateDeepAgentParams, type FilesystemPermission, type AnyBackendProtocol, createMemoryMiddleware } from "deepagents";
 import type { StructuredTool } from "@langchain/core/tools";
 import type { AgentMiddleware } from "langchain";
@@ -21,6 +21,7 @@ import { logger } from "./logger.js";
 import { createStuckLoopMiddleware } from "./middleware/stuck-loop.js";
 import { createPeriodicReminderMiddleware } from "./middleware/periodic-reminder.js";
 import { createCostTrackingMiddleware } from "./middleware/cost-tracking.js";
+import { createFsPathResolver } from "./middleware/fs-path-resolver.js";
 import { createHookMiddleware, getHooks } from "../app/hooks/index.js";
 
 // ─── Runtime Context ────────────────────────────────────
@@ -306,11 +307,162 @@ export function discoverMemoryFiles(workspaceRoot: string): string[] {
 /**
  * Normalize skills directory paths for deepagents.
  * deepagents expects POSIX paths relative to the backend root.
+ *
+ * Includes:
+ * 1. Built-in skill directories from config.skills.directories
+ * 2. Skills from each configured agentsDirectory (via <dir>/skills/)
  */
 export function resolveSkillsPaths(config: AppConfig): string[] {
-  return config.skills.directories.map((d) =>
-    d.startsWith("./") ? d : `./${d}`
-  );
+  const normalize = (d: string) => d.startsWith("./") || d.startsWith("/") ? d : `./${d}`;
+
+  const paths = config.skills.directories.map(normalize);
+
+  // Append skills from .agents directories
+  for (const agentsDir of config.agentsDirectories) {
+    const normalized = normalize(agentsDir);
+    const skillsDir = `${normalized}/skills`;
+    paths.push(skillsDir);
+  }
+
+  return paths;
+}
+
+// ─── Subagent Discovery ─────────────────────────────────
+
+/** Parsed subagent definition from an AGENT.md file */
+export interface DiscoveredSubAgent {
+  name: string;
+  description: string;
+  systemPrompt: string;
+}
+
+/**
+ * Parse YAML frontmatter from a markdown file.
+ * Returns { frontmatter, body } where frontmatter is a plain object.
+ * Supports simple string values and multi-line values (continuation lines starting with whitespace).
+ */
+function parseFrontmatter(content: string): { frontmatter: Record<string, string>; body: string } {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+  if (!match) {
+    return { frontmatter: {}, body: content };
+  }
+
+  const frontmatter: Record<string, string> = {};
+  let currentKey: string | null = null;
+
+  for (const rawLine of match[1]!.split("\n")) {
+    const line = rawLine.replace(/\r$/, "");
+
+    // Multi-line continuation: indented line appends to previous key
+    if (currentKey && (line.startsWith("  ") || line.startsWith("\t"))) {
+      frontmatter[currentKey] += ` ${line.trim()}`;
+      continue;
+    }
+
+    const colonIdx = line.indexOf(":");
+    if (colonIdx === -1) {
+      currentKey = null;
+      continue;
+    }
+
+    const key = line.slice(0, colonIdx).trim();
+    if (!key) {
+      currentKey = null;
+      continue;
+    }
+
+    let value = line.slice(colonIdx + 1).trim();
+    // Strip surrounding quotes (quoted values preserve # literally)
+    const isQuoted = (value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"));
+    if (isQuoted) {
+      value = value.slice(1, -1);
+    } else {
+      // Strip inline YAML comments only for unquoted values.
+      // YAML spec: comment starts with # preceded by a space.
+      // Avoid stripping '#' that's part of the value (e.g. "C# toolkit", "item #1").
+      // Match " #comment" or " # comment" but NOT " C#" or " #1".
+      const commentMatch = value.match(/ #(?=$| )/);
+      if (commentMatch && commentMatch.index !== undefined && commentMatch.index > 0) {
+        value = value.slice(0, commentMatch.index).trim();
+      }
+    }
+
+    frontmatter[key] = value;
+    currentKey = key;
+  }
+
+  return { frontmatter, body: match[2]!.trim() };
+}
+
+/**
+ * Discover subagents from configured .agents/agents/ directories.
+ *
+ * Convention: each subagent is a subdirectory containing an AGENT.md file
+ * with YAML frontmatter (name, description) and a body (systemPrompt).
+ *
+ * @example
+ * .agents/agents/researcher/AGENT.md:
+ *   ---
+ *   name: researcher
+ *   description: "Deep research assistant"
+ *   ---
+ *   You are a research assistant specialized in...
+ */
+export function discoverSubAgents(config: AppConfig, workspaceRoot?: string): DiscoveredSubAgent[] {
+  const subagents: DiscoveredSubAgent[] = [];
+  const log = logger.child("subagent-discovery");
+  const root = workspaceRoot || process.cwd();
+
+  for (const agentsDir of config.agentsDirectories) {
+    const normalized = agentsDir.startsWith("./") || agentsDir.startsWith("/") ? agentsDir : `./${agentsDir}`;
+    const agentsPath = resolve(root, normalized, "agents");
+
+    if (!existsSync(agentsPath)) {
+      log.debug("No agents/ directory found", { path: agentsPath });
+      continue;
+    }
+
+    let entries: string[];
+    try {
+      entries = readdirSync(agentsPath, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+    } catch {
+      log.warn("Failed to read agents directory", { path: agentsPath });
+      continue;
+    }
+
+    for (const entry of entries) {
+      const agentMdPath = join(agentsPath, entry, "AGENT.md");
+      if (!existsSync(agentMdPath)) {
+        log.debug("No AGENT.md found in agent directory", { dir: entry });
+        continue;
+      }
+
+      try {
+        const content = readFileSync(agentMdPath, "utf-8");
+        const { frontmatter, body } = parseFrontmatter(content);
+
+        const name = frontmatter.name || entry;
+        const description = frontmatter.description || `Subagent: ${name}`;
+
+        if (!body) {
+          log.warn("AGENT.md has no body (systemPrompt)", { path: agentMdPath });
+          continue;
+        }
+
+        subagents.push({ name, description, systemPrompt: body });
+        log.info("Discovered subagent", { name, source: agentMdPath });
+      } catch (err) {
+        log.warn("Failed to parse AGENT.md", {
+          path: agentMdPath,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  return subagents;
 }
 
 // ─── Permissions ────────────────────────────────────────
@@ -324,7 +476,9 @@ export function buildPermissions(config: AppConfig): FilesystemPermission[] {
   const permissions: FilesystemPermission[] = [];
 
   for (const denied of config.permissions.deniedPaths) {
-    const globPath = denied.startsWith("/") ? `${denied}**` : `/${denied}**`;
+    // Ensure path ends with / before appending ** to avoid matching sibling prefixes
+    const base = denied.endsWith("/") ? denied : `${denied}/`;
+    const globPath = base.startsWith("/") ? `${base}**` : `/${base}**`;
     permissions.push({
       operations: ["write"],
       paths: [globPath],
@@ -393,6 +547,9 @@ export function buildAgentConfigParts(
     }));
   }
 
+  // Resolve workspace-relative paths ("/test.txt") to absolute paths for ACP clients
+  middleware.push(createFsPathResolver(workspaceRoot));
+
   if (mwConfig.periodicReminder.enabled) {
     middleware.push(createPeriodicReminderMiddleware({
       firstAt: mwConfig.periodicReminder.firstAt,
@@ -413,16 +570,48 @@ export function buildAgentConfigParts(
     middleware.push(createHookMiddleware());
   }
 
+  // Discover subagents from .agents/agents/ directories
+  const discoveredSubAgents = discoverSubAgents(config, workspaceRoot);
+
+  // ── Mode-based overrides ─────────────────────────────────
+  const mode = config.permissions.mode;
+  let interruptOn: Record<string, boolean>;
+  let permissions: FilesystemPermission[];
+  let systemPrompt = resolveSystemPrompt(config, sessionConfig, workspaceRoot);
+
+  if (mode === "yolo") {
+    // No HITL, no path restrictions
+    interruptOn = {};
+    permissions = [{ operations: ["read", "write"], paths: ["/**"], mode: "allow" as const }];
+  } else if (mode === "plan") {
+    // HITL on writes + planning preamble
+    interruptOn = buildInterruptOn(config.permissions.interruptOn);
+    permissions = buildPermissions(config);
+    const planPreamble = `## Planning Mode
+Before making any changes, you MUST:
+1. Present a clear plan of what you intend to do
+2. Wait for user approval
+3. Only then proceed with execution
+
+`;
+    systemPrompt = planPreamble + systemPrompt;
+  } else {
+    // "ask" — default: HITL on writes
+    interruptOn = buildInterruptOn(config.permissions.interruptOn);
+    permissions = buildPermissions(config);
+  }
+
   return {
     model: resolveModel(config),
-    systemPrompt: resolveSystemPrompt(config, sessionConfig, workspaceRoot),
+    systemPrompt,
     tools,
     skills: resolveSkillsPaths(config),
     // When backend is provided, memory is handled by explicit middleware above.
     // Otherwise, fall back to the shortcut parameter (no addCacheControl).
     memory: backend ? undefined : (memoryPaths.length > 0 ? memoryPaths : undefined),
-    permissions: buildPermissions(config),
-    interruptOn: buildInterruptOn(config.permissions.interruptOn),
+    subagents: discoveredSubAgents.length > 0 ? discoveredSubAgents : undefined,
+    permissions,
+    interruptOn,
     checkpointer: true,  // Enables LangGraph checkpointing for HITL + session persistence.
                           // Note: DeepAgentsServer overrides this with its own MemorySaver in ACP mode.
     middleware,

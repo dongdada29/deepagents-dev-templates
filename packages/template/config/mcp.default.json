@@ -4,6 +4,11 @@
       "command": "npx",
       "args": ["-y", "@upstash/context7-mcp"],
       "description": "Query latest framework/API documentation"
+    },
+    "chrome-devtools": {
+      "command": "chrome-devtools-mcp",
+      "args": [],
+      "description": "Chrome DevTools MCP - browser automation, debugging, performance profiling"
     }
   }
 }

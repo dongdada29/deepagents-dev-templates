@@ -31,3 +31,8 @@ coverage/
 # Package artifacts
 *.tgz
 agent-package.release.json
+
+logs/
+examples/
+.agent-checkpoints/
+.agent-memory/

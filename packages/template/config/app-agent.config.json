@@ -23,6 +23,7 @@
     "spaceId": ""
   },
   "permissions": {
+    "mode": "ask",
     "interruptOn": ["write_file", "edit_file", "execute"],
     "allowedPaths": ["src/app/", "prompts/", "skills/", "config/"],
     "deniedPaths": ["src/runtime/"]
@@ -31,6 +32,7 @@
     "directories": ["./skills/builtin/", "./skills/platform/"],
     "progressiveLoading": true
   },
+  "agentsDirectories": ["./.agents"],
   "memory": {
     "enabled": true,
     "dir": "./.agent-memory",

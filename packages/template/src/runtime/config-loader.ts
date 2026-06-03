@@ -53,6 +53,13 @@ export const PlatformConfigSchema = z.object({
 });
 
 export const PermissionsConfigSchema = z.object({
+  /**
+   * Permission mode controlling HITL (human-in-the-loop) behavior:
+   * - "yolo": No approvals needed. Agent writes/edits/executes freely.
+   * - "ask":  HITL on write/edit/execute. User must approve each operation.
+   * - "plan": Agent presents a plan first, user approves, then executes with HITL.
+   */
+  mode: z.enum(["yolo", "ask", "plan"]).default("ask"),
   interruptOn: z.array(z.string()).default(["write_file", "edit_file", "execute"]),
   allowedPaths: z.array(z.string()).default(["src/app/", "prompts/", "skills/", "config/"]),
   deniedPaths: z.array(z.string()).default(["src/runtime/"]),
@@ -86,6 +93,18 @@ export const AppConfigSchema = z.object({
   platform: PlatformConfigSchema.default({}),
   permissions: PermissionsConfigSchema.default({}),
   skills: SkillsConfigSchema.default({}),
+  /**
+   * Paths to `.agents` directories that contain skills/ and agents/ subdirectories.
+   * Each entry should point to a directory following the `.agents` convention:
+   *   <dir>/skills/<skill-name>/SKILL.md
+   *   <dir>/agents/<agent-name>/AGENT.md
+   *
+   * Skills from these directories are merged with the built-in skills.
+   * Subagents discovered in agents/ are registered for task delegation.
+   *
+   * @example ["../examples/thesis-ppt/.agents", "./my-custom-agents"]
+   */
+  agentsDirectories: z.array(z.string()).default(["./.agents"]),
   memory: MemoryConfigSchema.default({}),
   logging: LoggingConfigSchema.default({}),
   middleware: z.object({

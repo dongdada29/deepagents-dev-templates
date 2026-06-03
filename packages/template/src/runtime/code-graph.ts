@@ -1,11 +1,12 @@
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
-import { resolve, relative } from "node:path";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { resolve, relative, join } from "node:path";
 
 export type CodeGraphNodeKind =
   | "entrypoint"
   | "runtime"
   | "tool"
   | "skill"
+  | "subagent"
   | "prompt"
   | "config"
   | "distribution"
@@ -65,6 +66,70 @@ function listSkillNodes(root: string): CodeGraphNode[] {
       });
     }
   }
+  return nodes;
+}
+
+/**
+ * List subagent nodes from configured .agents/agents/ directories.
+ * Reads agentsDirectories from the app config to find AGENT.md files.
+ */
+function listSubAgentNodes(root: string): CodeGraphNode[] {
+  const nodes: CodeGraphNode[] = [];
+
+  // Read agentsDirectories from config
+  let agentsDirectories: string[] = [];
+  try {
+    const configPath = resolve(root, "config/app-agent.config.json");
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, "utf-8")) as Record<string, unknown>;
+      if (Array.isArray(config.agentsDirectories)) {
+        agentsDirectories = config.agentsDirectories as string[];
+      }
+    }
+  } catch {
+    // Config parse failure is non-fatal for code graph
+  }
+
+  for (const agentsDir of agentsDirectories) {
+    const normalized = agentsDir.startsWith("./") || agentsDir.startsWith("/") ? agentsDir : `./${agentsDir}`;
+    const agentsPath = resolve(root, normalized, "agents");
+    if (!existsSync(agentsPath)) continue;
+
+    let entries: string[];
+    try {
+      entries = readdirSync(agentsPath, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const agentMdPath = join(agentsPath, entry, "AGENT.md");
+      if (!existsSync(agentMdPath)) continue;
+
+      // Try to extract name from frontmatter
+      let label = entry;
+      try {
+        const content = readFileSync(agentMdPath, "utf-8");
+        const nameMatch = content.match(/^---\r?\n[\s\S]*?name:\s*(.+)\r?\n[\s\S]*?---/);
+        if (nameMatch) {
+          label = nameMatch[1]!.trim().replace(/^["']|["']$/g, "");
+        }
+      } catch {
+        // Use directory name as fallback
+      }
+
+      nodes.push({
+        id: `subagent:${entry}`,
+        label,
+        kind: "subagent",
+        path: rel(root, agentMdPath),
+        editable: "ai-user",
+      });
+    }
+  }
+
   return nodes;
 }
 
@@ -140,9 +205,18 @@ export function generateCodeGraph(root = process.cwd()): CodeGraph {
   }
 
   nodes.push(...listSkillNodes(root));
+  nodes.push(...listSubAgentNodes(root));
 
   const skillEdges = nodes
     .filter((node) => node.kind === "skill")
+    .map((node) => ({
+      from: "runtime:helpers",
+      to: node.id,
+      kind: "loads" as const,
+    }));
+
+  const subagentEdges = nodes
+    .filter((node) => node.kind === "subagent")
     .map((node) => ({
       from: "runtime:helpers",
       to: node.id,
@@ -170,6 +244,7 @@ export function generateCodeGraph(root = process.cwd()): CodeGraph {
     { from: "script:package", to: "manifest:package", kind: "packages" },
     { from: "script:package", to: "manifest:template", kind: "packages" },
     ...skillEdges,
+    ...subagentEdges,
   ];
 
   return {

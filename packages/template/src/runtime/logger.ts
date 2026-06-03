@@ -2,8 +2,16 @@
  * Structured Logger
  *
  * Provides consistent, structured logging for the agent runtime.
- * Supports log levels, context fields, and JSON output mode.
+ * Supports log levels, context fields, JSON output mode, and file logging.
+ *
+ * Environment variables:
+ *   LOG_LEVEL — debug | info | warn | error (default: info)
+ *   LOG_DIR   — directory for log files (e.g., ./logs). When set, all log
+ *               output is tee'd to a timestamped .jsonl file in that directory.
  */
+
+import { appendFileSync, mkdirSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -18,6 +26,53 @@ export interface LoggerOptions {
   level?: LogLevel;
   structured?: boolean;
   prefix?: string;
+}
+
+/** Lazy-initialized file writer — created once on first write */
+let logFileStream: { path: string; write: (line: string) => void } | null = null;
+
+function getLogFile(): { path: string; write: (line: string) => void } | null {
+  if (logFileStream) return logFileStream;
+
+  const logDir = process.env.LOG_DIR;
+  if (!logDir) return null;
+
+  try {
+    const dir = resolve(logDir);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    const filePath = resolve(dir, `agent-${timestamp}-${process.pid}.jsonl`);
+
+    logFileStream = {
+      path: filePath,
+      write: (line: string) => {
+        try {
+          appendFileSync(filePath, line + "\n");
+        } catch {
+          // Swallow write errors — don't crash the agent over logging
+        }
+      },
+    };
+
+    // Write initial marker
+    logFileStream.write(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      message: "Log file initialized",
+      logDir: dir,
+      pid: process.pid,
+    }));
+
+    return logFileStream;
+  } catch (err) {
+    // Warn on stderr so operator knows file logging failed
+    process.stderr.write(
+      `[logger] Failed to initialize log file in "${logDir}": ${err instanceof Error ? err.message : String(err)}\n`
+    );
+    return null;
+  }
 }
 
 export class Logger {
@@ -66,28 +121,35 @@ export class Logger {
     return `${timestamp} [${level.toUpperCase()}] ${prefix}${message}${contextStr}`;
   }
 
-  debug(message: string, context?: Record<string, unknown>): void {
-    if (this.shouldLog("debug")) {
-      process.stderr.write(`${this.formatMessage("debug", message, context)}\n`);
+  private emit(level: LogLevel, message: string, context?: Record<string, unknown>): void {
+    if (!this.shouldLog(level)) return;
+
+    const formatted = this.formatMessage(level, message, context);
+
+    // Always write to stderr
+    process.stderr.write(`${formatted}\n`);
+
+    // Tee to file if LOG_DIR is configured
+    const logFile = getLogFile();
+    if (logFile) {
+      logFile.write(formatted);
     }
+  }
+
+  debug(message: string, context?: Record<string, unknown>): void {
+    this.emit("debug", message, context);
   }
 
   info(message: string, context?: Record<string, unknown>): void {
-    if (this.shouldLog("info")) {
-      process.stderr.write(`${this.formatMessage("info", message, context)}\n`);
-    }
+    this.emit("info", message, context);
   }
 
   warn(message: string, context?: Record<string, unknown>): void {
-    if (this.shouldLog("warn")) {
-      process.stderr.write(`${this.formatMessage("warn", message, context)}\n`);
-    }
+    this.emit("warn", message, context);
   }
 
   error(message: string, context?: Record<string, unknown>): void {
-    if (this.shouldLog("error")) {
-      process.stderr.write(`${this.formatMessage("error", message, context)}\n`);
-    }
+    this.emit("error", message, context);
   }
 
   /** Create a child logger with additional prefix */

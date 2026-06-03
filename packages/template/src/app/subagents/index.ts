@@ -1,40 +1,20 @@
 /**
- * Subagent Registry
+ * Subagent Discovery
  *
- * Define and register subagents that can be delegated to
- * via the deepagents `task` tool.
+ * Re-exports the file-based subagent discovery from runtime helpers.
+ * Subagents are discovered from .agents/agents/ directories configured
+ * via `agentsDirectories` in app-agent.config.json.
  *
- * @scaffold — Not yet wired. This module provides extension points for
- * future custom subagent definitions. Currently has zero consumers.
- * deepagents already provides built-in subagents (research, planner).
- * Remove or implement custom subagents as needed.
+ * Convention: each subagent is a subdirectory containing an AGENT.md file
+ * with YAML frontmatter (name, description) and a body (systemPrompt).
+ *
+ * @example
+ * .agents/agents/researcher/AGENT.md:
+ *   ---
+ *   name: researcher
+ *   description: "Deep research assistant"
+ *   ---
+ *   You are a research assistant specialized in...
  */
 
-export interface SubAgentDefinition {
-  name: string;
-  description: string;
-  systemPrompt: string;
-  tools?: string[];
-}
-
-const subagentRegistry = new Map<string, SubAgentDefinition>();
-
-export function registerSubAgent(subagent: SubAgentDefinition): void {
-  subagentRegistry.set(subagent.name, subagent);
-}
-
-export function getSubAgent(name: string): SubAgentDefinition | undefined {
-  return subagentRegistry.get(name);
-}
-
-export function listSubAgents(): SubAgentDefinition[] {
-  return Array.from(subagentRegistry.values());
-}
-
-// Register built-in subagents here
-// Example:
-// registerSubAgent({
-//   name: "researcher",
-//   description: "Deep research on a topic using web search",
-//   systemPrompt: "You are a research assistant...",
-// });
+export { discoverSubAgents, type DiscoveredSubAgent } from "../../runtime/helpers.js";

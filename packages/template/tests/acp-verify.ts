@@ -1,0 +1,332 @@
+/**
+ * ACP 功能验证脚本
+ * 逐项验证 TC-01 ~ TC-06，输出详细日志
+ */
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { Readable, Writable } from "node:stream";
+import {
+  ClientSideConnection,
+  PROTOCOL_VERSION,
+  ndJsonStream,
+  type Client,
+  type RequestPermissionRequest,
+  type RequestPermissionResponse,
+  type SessionNotification,
+  type ReadTextFileRequest,
+  type ReadTextFileResponse,
+  type WriteTextFileRequest,
+  type WriteTextFileResponse,
+} from "@agentclientprotocol/sdk";
+import { writeFileSync, readFileSync, existsSync, unlinkSync } from "node:fs";
+import { resolve } from "node:path";
+
+const PASS = "\x1b[32m✓ PASS\x1b[0m";
+const FAIL = "\x1b[31m✗ FAIL\x1b[0m";
+const INFO = "\x1b[36m→\x1b[0m";
+
+// 修正：用 template 目录作为 cwd（与 Zed 打开 packages/template/ 一致）
+const TEMPLATE_DIR = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
+
+let sessionId: string | undefined;
+const testResults: { name: string; pass: boolean; detail: string }[] = [];
+
+class VerifyClient implements Client {
+  updates: SessionNotification[] = [];
+  permissions: RequestPermissionRequest[] = [];
+  autoApprove = false;
+  allowAlwaysOnce = false;
+  debug = true;
+
+  async sessionUpdate(params: SessionNotification): Promise<void> {
+    this.updates.push(params);
+    const u = params.update as any;
+    // 调试：打印所有 update 类型
+    const updateType = u.sessionUpdate ?? u.type ?? "unknown";
+    if (this.debug) {
+      const preview = JSON.stringify(u).slice(0, 200);
+      console.log(`  [update] ${updateType}: ${preview}`);
+    }
+    if (updateType === "message_delta") {
+      const text = u.content?.map?.((c: any) => c.text ?? c.content ?? "").join("") ?? "";
+      if (text) process.stdout.write(text);
+    }
+    if (updateType === "message_complete") {
+      process.stdout.write("\n");
+    }
+  }
+
+  async requestPermission(params: RequestPermissionRequest): Promise<RequestPermissionResponse> {
+    this.permissions.push(params);
+    console.log(`  ${INFO} Permission requested: ${JSON.stringify(params, null, 2)}`);
+    // allowAlwaysOnce: 返回 allow-always 选项（用于测试缓存）
+    if (this.allowAlwaysOnce) {
+      this.allowAlwaysOnce = false;
+      return { outcome: { outcome: "selected", optionId: "allow-always" } };
+    }
+    return {
+      outcome: this.autoApprove
+        ? { outcome: "selected", optionId: "allow-once" }
+        : { outcome: "selected", optionId: "reject" },
+    };
+  }
+
+  async readTextFile(params: ReadTextFileRequest): Promise<ReadTextFileResponse> {
+    // 服务端已将路径转为绝对路径，直接使用
+    const fullPath = params.path.startsWith("/") && params.path.includes(TEMPLATE_DIR)
+      ? params.path
+      : resolve(TEMPLATE_DIR, params.path.startsWith("/") ? params.path.slice(1) : params.path);
+    console.log(`  ${INFO} readTextFile: ${params.path} → ${fullPath}`);
+    try {
+      const content = readFileSync(fullPath, "utf-8");
+      return { content };
+    } catch {
+      return { content: "" };
+    }
+  }
+
+  async writeTextFile(params: WriteTextFileRequest): Promise<WriteTextFileResponse> {
+    // 服务端已将路径转为绝对路径，直接使用
+    const fullPath = params.path.startsWith("/") && params.path.includes(TEMPLATE_DIR)
+      ? params.path
+      : resolve(TEMPLATE_DIR, params.path.startsWith("/") ? params.path.slice(1) : params.path);
+    console.log(`  ${INFO} writeTextFile: ${params.path} → ${fullPath}`);
+    try {
+      writeFileSync(fullPath, params.content ?? "", "utf-8");
+    } catch (err) {
+      console.log(`  ${INFO} writeTextFile error: ${err}`);
+    }
+    return {};
+  }
+}
+
+function startServer(): ChildProcessWithoutNullStreams {
+  const templateDir = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
+  return spawn("node", ["--import", "tsx", "src/index.ts"], {
+    cwd: templateDir,
+    env: {
+      ...process.env,
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || "acp-verify-dummy-key",
+      LOG_LEVEL: "debug",
+    },
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+}
+
+function record(name: string, pass: boolean, detail: string) {
+  testResults.push({ name, pass, detail });
+  console.log(`  ${pass ? PASS : FAIL} ${name}: ${detail}`);
+}
+
+async function run() {
+  console.log("\n═══════════════════════════════════════════════");
+  console.log("  ACP 功能验证 — Zed 集成测试");
+  console.log("═══════════════════════════════════════════════\n");
+
+  const child = startServer();
+  let stderr = "";
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderr += chunk.toString("utf-8");
+  });
+
+  const client = new VerifyClient();
+  const connection = new ClientSideConnection(
+    () => client,
+    ndJsonStream(
+      Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
+      Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>
+    )
+  );
+
+  try {
+    // ─── TC-01: ACP 连接建立 ───
+    console.log("── TC-01: ACP 连接建立 ──");
+    const init = await connection.initialize({
+      protocolVersion: PROTOCOL_VERSION,
+      clientInfo: { name: "acp-verify", version: "0.1.0" },
+      clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
+    });
+
+    const agentName = init.agentInfo?.name;
+    const hasLoadSession = init.agentCapabilities?.loadSession;
+    const hasCommands = init.agentCapabilities?.sessionCapabilities?.commands;
+
+    record("agentInfo.name", agentName === "my-scenario-agent", `got "${agentName}"`);
+    record("loadSession capability", hasLoadSession === true, `got ${hasLoadSession}`);
+    record("commands capability", hasCommands === true, `got ${hasCommands}`);
+
+    // ─── TC-02: 新建会话 ───
+    console.log("\n── TC-02: 新建会话 ──");
+    client.updates = [];
+    const session = await connection.newSession({
+      cwd: TEMPLATE_DIR,
+      mcpServers: [],
+    });
+
+    sessionId = session.sessionId;
+    record("sessionId format", /^sess_/.test(session.sessionId), `got "${session.sessionId}"`);
+    record("default mode", session.modes?.currentModeId === "agent", `got "${session.modes?.currentModeId}"`);
+
+    const hasCommandsUpdate = client.updates.some(
+      (u) => u.update.sessionUpdate === "available_commands_update"
+    );
+    record("available_commands_update", hasCommandsUpdate, `received: ${hasCommandsUpdate}`);
+
+    // ─── TC-03: 基本对话 ───
+    console.log("\n── TC-03: 基本对话 ──");
+    console.log(`  ${INFO} 发送: "回复 hello world，不要说其他内容"`);
+    client.updates = [];
+    await connection.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: "text", text: "回复 hello world，不要说其他内容" }],
+    });
+
+    const textUpdates = client.updates.filter(
+      (u: any) => u.update.sessionUpdate === "agent_message_chunk"
+    );
+    const responseText = textUpdates
+      .map((u: any) => u.update.content?.text ?? "")
+      .join("");
+    record("收到文本响应", textUpdates.length > 0, `got ${textUpdates.length} chunks, text: "${responseText}"`);
+    record("响应包含 hello", responseText.toLowerCase().includes("hello"), `text: "${responseText}"`);
+
+    // ─── TC-04: 文件读取 ───
+    console.log("\n── TC-04: 文件读取工具 ──");
+    console.log(`  ${INFO} 发送: "读取 package.json 并告诉我 name 字段的值，只输出值"`);
+    client.updates = [];
+    await connection.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: "text", text: "读取 package.json 并告诉我 name 字段的值，只输出值" }],
+    });
+
+    const readUpdates = client.updates.filter(
+      (u: any) => u.update.sessionUpdate === "tool_call"
+    );
+    const allText = client.updates
+      .filter((u: any) => u.update.sessionUpdate === "agent_message_chunk")
+      .map((u: any) => u.update.content?.text ?? "")
+      .join("");
+    // invoke 模式下不发出 tool_call 通知，只检查结果
+    record("返回项目名称", allText.includes("deepagents-dev-templates"), `response: "${allText.slice(0, 150)}"`);
+
+    // ─── TC-05: 文件写入（权限拦截） ───
+    console.log("\n── TC-05: 文件写入（权限拦截）");
+    console.log(`  ${INFO} 发送: "创建文件 acp-verify-test.txt，内容为 ACP_OK"`);
+    client.updates = [];
+    client.permissions = [];
+    client.autoApprove = false; // 拒绝权限
+    await connection.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: "text", text: "创建文件 acp-verify-test.txt，内容为 ACP_OK。直接调用工具，不要问问题。" }],
+    });
+
+    const filePath = resolve(TEMPLATE_DIR, "acp-verify-test.txt");
+    const fileCreated = existsSync(filePath);
+    record("权限请求触发", client.permissions.length > 0, `got ${client.permissions.length} permission requests`);
+    record("拒绝后文件未创建", !fileCreated, `file exists: ${fileCreated}`);
+
+    // 清理
+    if (fileCreated) unlinkSync(filePath);
+
+    // ─── TC-15: 权限中断 - 改为 autoApprove ───
+    console.log("\n── TC-15: 权限中断（自动批准）");
+    console.log(`  ${INFO} 发送: "创建文件 acp-verify-approved.txt，内容为 APPROVED"`);
+    client.updates = [];
+    client.permissions = [];
+    client.autoApprove = true;
+    await connection.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: "text", text: "创建文件 acp-verify-approved.txt，内容为 APPROVED。直接调用工具，不要问问题。" }],
+    });
+
+    const approvedPath = resolve(TEMPLATE_DIR, "acp-verify-approved.txt");
+    const approvedExists = existsSync(approvedPath);
+    let approvedContent = "";
+    if (approvedExists) {
+      approvedContent = readFileSync(approvedPath, "utf-8").trim();
+      unlinkSync(approvedPath);
+    }
+    record("批准后文件创建", approvedExists, `file exists: ${approvedExists}`);
+    record("文件内容正确", approvedContent === "APPROVED", `content: "${approvedContent}"`);
+
+    // ─── TC-15b: allow_always 缓存验证 ───
+    console.log("\n── TC-15b: allow_always 缓存（同 session 不再弹窗）");
+    // 第一次：选择 allow-always
+    console.log(`  ${INFO} 第一次: 创建 acp-always-test.txt（选择 allow-always）`);
+    client.updates = [];
+    client.permissions = [];
+    client.autoApprove = true;
+    // 覆盖 requestPermission 返回 allow-always
+    client.allowAlwaysOnce = true;
+    await connection.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: "text", text: "创建文件 acp-always-test.txt，内容为 FIRST。直接调用工具，不要问问题。" }],
+    });
+
+    const alwaysPath = resolve(TEMPLATE_DIR, "acp-always-test.txt");
+    const firstExists = existsSync(alwaysPath);
+    const firstPerms = client.permissions.length;
+    if (firstExists) unlinkSync(alwaysPath);
+    record("第一次: 权限请求触发", firstPerms > 0, `got ${firstPerms} permission requests`);
+    record("第一次: 文件创建", firstExists, `file exists: ${firstExists}`);
+
+    // 第二次：不再弹窗（autoApprove=false，但缓存应生效）
+    console.log(`  ${INFO} 第二次: 创建 acp-always-test2.txt（应自动批准，不弹窗）`);
+    client.updates = [];
+    client.permissions = [];
+    client.autoApprove = false; // 正常会拒绝，但 allow_always 缓存应跳过
+    client.allowAlwaysOnce = false;
+    await connection.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: "text", text: "创建文件 acp-always-test2.txt，内容为 SECOND。直接调用工具，不要问问题。" }],
+    });
+
+    const alwaysPath2 = resolve(TEMPLATE_DIR, "acp-always-test2.txt");
+    const secondExists = existsSync(alwaysPath2);
+    const secondPerms = client.permissions.length;
+    if (secondExists) unlinkSync(alwaysPath2);
+    record("第二次: 无权限弹窗（缓存生效）", secondPerms === 0, `got ${secondPerms} permission requests`);
+    record("第二次: 文件创建（自动批准）", secondExists, `file exists: ${secondExists}`);
+
+  } catch (err) {
+    console.error(`\n${FAIL} Fatal error:`, err);
+  } finally {
+    child.kill();
+
+    // ─── 汇总 ───
+    console.log("\n═══════════════════════════════════════════════");
+    console.log("  验证结果汇总");
+    console.log("═══════════════════════════════════════════════");
+    const passed = testResults.filter((r) => r.pass).length;
+    const failed = testResults.filter((r) => !r.pass).length;
+    for (const r of testResults) {
+      console.log(`  ${r.pass ? PASS : FAIL} ${r.name}: ${r.detail}`);
+    }
+    console.log(`\n  总计: ${passed} 通过, ${failed} 失败\n`);
+
+    // 输出 stderr 日志片段
+    if (stderr) {
+      console.log("── 服务端日志（stderr 摘要）──");
+      const lines = stderr.split("\n").filter((l) => l.trim());
+      // 只输出关键行
+      const keyLines = lines.filter(
+        (l) =>
+          l.includes("bootstrap") ||
+          l.includes("session") ||
+          l.includes("Session") ||
+          l.includes("prompt") ||
+          l.includes("tool") ||
+          l.includes("permission") ||
+          l.includes("lifecycle") ||
+          l.includes("config") ||
+          l.includes("START") ||
+          l.includes("ERROR") ||
+          l.includes("WARN")
+      );
+      for (const line of keyLines.slice(-30)) {
+        console.log(`  ${line}`);
+      }
+    }
+  }
+}
+
+run().catch(console.error);

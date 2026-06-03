@@ -7,6 +7,7 @@
  * - Manages ACP sessions (new, prompt, cancel, set_mode)
  * - Streams tool calls and text deltas to ACP clients
  * - Creates DeepAgent instances per session via createDeepAgent()
+ * - Handles HITL permission requests via requestToolPermission()
  * - Handles workspace file operations via ACPFilesystemBackend
  *
  * This module builds the DeepAgentConfig using shared helpers from
@@ -17,6 +18,8 @@
 import { DeepAgentsServer, type DeepAgentConfig } from "deepagents-acp";
 import { loadConfig, type ACPSessionConfig } from "./config-loader.js";
 import { logger } from "./logger.js";
+import type { MCPManager } from "./mcp-manager.js";
+import { forwardAcpMcpServers } from "./mcp-acp-adapter.js";
 import {
   createRuntimeContext,
   createRuntimeContextAsync,
@@ -82,71 +85,108 @@ class SessionManager {
   }
 }
 
-// ─── Session Recovery + Lifecycle Patch ──────────────────
+// ─── ACP MCP Forwarding Toggle ──────────────────────────
+
+/**
+ * When deepagents-acp adds native MCP forwarding, set this env var to
+ * disable our custom forwarding and avoid double-loading:
+ *
+ *   ACP_MCP_FORWARDING=disabled
+ *
+ * Or remove the forwardAcpMcpServers() call from patchSessionLifecycle
+ * and delete mcp-acp-adapter.ts entirely.
+ */
+function isAcpMcpForwardingEnabled(): boolean {
+  return process.env.ACP_MCP_FORWARDING !== "disabled";
+}
+
+// ─── Session Lifecycle Patch ────────────────────────────
 
 /**
  * Patch a DeepAgentsServer instance to:
- * 1. Auto-recover from stale sessions (Session not found)
- * 2. Track session lifecycle (new, close, list)
+ * 1. Track session lifecycle (new, close, list)
+ * 2. Forward ACP session mcpServers to MCPManager (when enabled)
  * 3. Add closeSession and listSessions methods
+ *
+ * HITL permission handling is done natively by DeepAgentsServer
+ * via requestToolPermission() — no patching needed.
+ *
+ * @rollback — To remove ACP MCP forwarding when deepagents-acp adds native support:
+ *   1. Delete mcp-acp-adapter.ts
+ *   2. Remove the forwardAcpMcpServers() call below
+ *   3. Remove the mcpManager parameter from this function
+ *   4. Update bootstrap() to call patchSessionLifecycle(server) without mcpManager
  */
-function patchSessionLifecycle(server: DeepAgentsServer): SessionManager {
+function patchSessionLifecycle(
+  server: DeepAgentsServer,
+  mcpManager: MCPManager
+): SessionManager {
   const log = logger.child("session-lifecycle");
   const manager = new SessionManager();
   const s = server as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+  const mcpForwardingEnabled = isAcpMcpForwardingEnabled();
 
-  // Patch handleNewSession to track new sessions
+  if (!mcpForwardingEnabled) {
+    log.info("ACP MCP forwarding disabled via ACP_MCP_FORWARDING=disabled");
+  }
+
+  // Track last-known mcpServers per session for recovery
+  const sessionMcpServers = new Map<string, unknown>();
+
+  // Patch handleNewSession to track sessions + forward MCP servers
   const origNewSession = s.handleNewSession?.bind(server);
   if (origNewSession) {
     s.handleNewSession = async (...args: unknown[]) => {
-      const params = args[0] as { mode?: string };
+      const params = args[0] as {
+        mode?: string;
+        mcpServers?: unknown;
+      };
       const result = await origNewSession(...args) as { sessionId: string } | undefined;
       if (result?.sessionId) {
         manager.track(result.sessionId, params?.mode ?? "agent");
+        // @rollback: remove this block when deepagents-acp supports MCP natively
+        if (mcpForwardingEnabled && params.mcpServers) {
+          sessionMcpServers.set(result.sessionId, params.mcpServers);
+          forwardAcpMcpServers(params.mcpServers, mcpManager);
+        }
       }
       return result;
     };
   }
 
-  // Patch handleLoadSession for stale session recovery
-  const origLoadSession = s.handleLoadSession?.bind(server);
-  if (origLoadSession) {
-    s.handleLoadSession = async (...args: unknown[]) => {
-      try {
-        return await origLoadSession(...args);
-      } catch (err) {
-        if (err instanceof Error && err.message.includes("Session not found")) {
-          const conn = args[1];
-          const newSession = await s.handleNewSession?.({ mode: "agent" }, conn) as { sessionId: string } | undefined;
-          if (newSession) {
-            log.info("Auto-created session for stale loadSession", { created: newSession.sessionId });
-            return newSession;
-          }
-        }
-        throw err;
-      }
-    };
-  }
-
-  // Patch handlePrompt for stale session recovery + activity tracking
+  // Patch handlePrompt for activity tracking + stale session recovery
   const origPrompt = s.handlePrompt?.bind(server);
   if (origPrompt) {
     s.handlePrompt = async (...args: unknown[]) => {
       const params = args[0] as { sessionId: string; prompt: unknown[] };
-      manager.touch(params.sessionId);
 
       try {
-        return await origPrompt(...args);
+        const result = await origPrompt(...args);
+        // Only count successful prompts
+        manager.touch(params.sessionId);
+        return result;
       } catch (err) {
         if (err instanceof Error && err.message.includes("Session not found")) {
+          // Clean up the dead session
+          manager.close(params.sessionId);
+          const savedMcp = sessionMcpServers.get(params.sessionId);
+          sessionMcpServers.delete(params.sessionId);
+
           const conn = args[1];
-          const newSession = await s.handleNewSession?.({ mode: "agent" }, conn) as { sessionId: string } | undefined;
+          const newSession = await s.handleNewSession?.(
+            { mode: "agent", mcpServers: savedMcp },
+            conn
+          ) as { sessionId: string } | undefined;
           if (newSession) {
             log.info("Auto-created session for stale prompt", {
               requested: params.sessionId,
               created: newSession.sessionId,
             });
-            return await origPrompt({ ...params, sessionId: newSession.sessionId }, conn);
+            // Use the patched handlePrompt (not origPrompt) for activity tracking
+            return await (s.handlePrompt as Function)(
+              { ...params, sessionId: newSession.sessionId },
+              conn
+            );
           }
         }
         throw err;
@@ -180,7 +220,7 @@ function patchSessionLifecycle(server: DeepAgentsServer): SessionManager {
   };
 
   log.info("Session lifecycle patch applied", {
-    features: ["recovery", "tracking", "close", "list"],
+    features: ["tracking", "close", "list"],
   });
 
   return manager;
@@ -254,9 +294,9 @@ export async function bootstrap(options: ACPServerOptions = {}): Promise<void> {
   }
 
   // Build DeepAgentConfig using shared helpers
-  const agentConfig = await buildACPAgentConfigAsync(config, workspaceRoot, sessionConfig);
+  const { agentConfig, mcpManager } = await buildACPAgentConfigWithMcpAsync(config, workspaceRoot, sessionConfig);
 
-  // Start the ACP server with session recovery patch
+  // Start the ACP server
   const server = new DeepAgentsServer({
     agents: agentConfig,
     serverName: config.agent.name,
@@ -272,7 +312,8 @@ export async function bootstrap(options: ACPServerOptions = {}): Promise<void> {
     tools: agentConfig.tools?.length,
   });
 
-  const _sessionManager = patchSessionLifecycle(server);
+  // Pass mcpManager so ACP session mcpServers can be forwarded
+  const _sessionManager = patchSessionLifecycle(server, mcpManager);
   log.info("Active sessions after startup", { count: _sessionManager.count });
   await server.start();
 }
@@ -340,6 +381,33 @@ export async function buildACPAgentConfigAsync(
   });
 
   return agentConfig;
+}
+
+/**
+ * Build agent config + expose MCPManager for ACP session MCP forwarding.
+ */
+export async function buildACPAgentConfigWithMcpAsync(
+  config: ReturnType<typeof loadConfig>,
+  workspaceRoot: string,
+  sessionConfig?: ACPSessionConfig
+): Promise<{ agentConfig: DeepAgentConfig; mcpManager: MCPManager }> {
+  const log = logger.child("config-builder");
+
+  const runtimeCtx = await createRuntimeContextAsync(config, sessionConfig);
+  const agentConfig: DeepAgentConfig = {
+    name: config.agent.name,
+    description: config.agent.description,
+    ...buildAgentConfigParts(config, sessionConfig, workspaceRoot, runtimeCtx.tools),
+  };
+
+  log.info("Agent config built", {
+    tools: runtimeCtx.tools.length,
+    skills: agentConfig.skills,
+    permissions: agentConfig.permissions?.length,
+    mcpServers: runtimeCtx.mcpManager.listServers(),
+  });
+
+  return { agentConfig, mcpManager: runtimeCtx.mcpManager };
 }
 
 export function loadSessionConfigFromEnv(): ACPSessionConfig | undefined {
