@@ -23,7 +23,7 @@
     "spaceId": ""
   },
   "permissions": {
-    "mode": "ask",
+    "mode": "yolo",
     "interruptOn": ["write_file", "edit_file", "execute"],
     "allowedPaths": ["src/app/", "prompts/", "skills/", "config/"],
     "deniedPaths": ["src/runtime/"]
