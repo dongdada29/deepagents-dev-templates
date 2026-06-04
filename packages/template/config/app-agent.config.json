@@ -10,7 +10,8 @@
     "provider": "anthropic",
     "name": "claude-sonnet-4-6",
     "settings": {
-      "temperature": 0
+      "temperature": 0,
+      "maxTokens": 16384
     }
   },
   "mcp": {
