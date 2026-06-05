@@ -99,10 +99,6 @@ describe("ACP stdio server", () => {
 
       expect(session.sessionId).toMatch(/^sess_/);
       expect(session.modes?.currentModeId).toBe("agent");
-      smokeClient.updates = [];
-      await waitFor(() => smokeClient.updates.some((update) =>
-        update.update.sessionUpdate === "available_commands_update"
-      ));
       expect(smokeClient.updates.some((update) =>
         update.update.sessionUpdate === "available_commands_update"
       )).toBe(true);
@@ -141,13 +137,3 @@ describe("ACP stdio server", () => {
     }
   }, 10_000);
 });
-
-async function waitFor(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
-  const startedAt = Date.now();
-  while (!predicate()) {
-    if (Date.now() - startedAt > timeoutMs) {
-      throw new Error("Timed out waiting for condition");
-    }
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-}

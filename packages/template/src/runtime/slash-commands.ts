@@ -69,13 +69,13 @@ const ACP_BUILTIN_COMMANDS = [
   { name: "clear", description: "清空当前 ACP 会话上下文" },
 ];
 
-const DEEPAGENTS_ACP_DEFAULT_COMMANDS = [
-  { name: "plan", description: "切换到计划模式" },
-  ...ACP_BUILTIN_COMMANDS,
-  { name: "status", description: "显示当前会话状态" },
-];
-
+// Names that deepagents-acp ships as built-in commands (see
+// node_modules/deepagents-acp/dist/index.cjs DEFAULT_COMMANDS) and that we
+// therefore filter out of getAcpSlashCommandSpecs() — the library's own
+// handleNewSession concatenates [...DEFAULT_COMMANDS, ...customCommands], so
+// including these in customCommands would duplicate them in the wire payload.
 const ACP_DEFAULT_COMMAND_NAMES = new Set([
+  "plan",
   ...ACP_BUILTIN_COMMANDS.map((command) => command.name),
   "status",
 ]);
@@ -273,25 +273,6 @@ export function getAcpSlashCommandSpecs(): Array<{
       description: command.description,
       ...(command.inputHint ? { input: { hint: command.inputHint } } : {}),
     }));
-}
-
-export function getAcpAvailableCommandSpecs(): Array<{
-  name: string;
-  description: string;
-  input?: { hint: string };
-}> {
-  const commands = new Map<string, {
-    name: string;
-    description: string;
-    input?: { hint: string };
-  }>();
-  for (const command of DEEPAGENTS_ACP_DEFAULT_COMMANDS) {
-    commands.set(command.name, command);
-  }
-  for (const command of getAcpSlashCommandSpecs()) {
-    commands.set(command.name, command);
-  }
-  return Array.from(commands.values());
 }
 
 function parseSlashCommand(input: string): ParsedSlashCommand | null {

@@ -27,7 +27,6 @@ import {
 } from "./helpers.js";
 import {
   executeSlashCommand,
-  getAcpAvailableCommandSpecs,
   getAcpSlashCommandSpecs,
   type SlashToolInfo,
 } from "./slash-commands.js";
@@ -61,26 +60,15 @@ interface AcpPromptParams {
 interface AcpConnection {
   sessionUpdate(params: {
     sessionId: string;
-    update: AcpSessionUpdate;
-  }): Promise<void>;
-}
-
-type AcpSessionUpdate =
-  | {
+    update: {
       sessionUpdate: "agent_message_chunk";
       content: {
         type: "text";
         text: string;
       };
-    }
-  | {
-      sessionUpdate: "available_commands_update";
-      availableCommands: Array<{
-        name: string;
-        description: string;
-        input?: { hint: string };
-      }>;
     };
+  }): Promise<void>;
+}
 
 interface AcpSessionState {
   id: string;
@@ -197,7 +185,13 @@ function patchSessionLifecycle(
   // Track last-known mcpServers per session for recovery
   const sessionMcpServers = new Map<string, unknown>();
 
-  // Patch handleNewSession to track sessions + forward MCP servers
+  // Patch handleNewSession to track sessions + forward MCP servers.
+  // We do NOT resend available_commands_update after session creation:
+  // deepagents-acp's handleNewSession already sends it synchronously inside
+  // the original handler (node_modules/deepagents-acp/dist/index.cjs:785) with
+  // [...DEFAULT_COMMANDS, ...customCommands], where customCommands comes from
+  // agentConfig.commands (set to getAcpSlashCommandSpecs() in buildACPAgentConfig).
+  // A second send would race with the first and produce inconsistent UI.
   const origNewSession = s.handleNewSession?.bind(server);
   if (origNewSession) {
     s.handleNewSession = async (...args: unknown[]) => {
@@ -205,7 +199,6 @@ function patchSessionLifecycle(
         mode?: string;
         mcpServers?: unknown;
       };
-      const conn = args[1] as AcpConnection | undefined;
       const result = await origNewSession(...args) as { sessionId: string } | undefined;
       if (result?.sessionId) {
         manager.track(result.sessionId, params?.mode ?? "agent");
@@ -218,7 +211,6 @@ function patchSessionLifecycle(
           sessionMcpServers.set(result.sessionId, params.mcpServers);
           forwardAcpMcpServers(params.mcpServers, mcpManager);
         }
-        sendAcpAvailableCommandsAfterSessionReady(result.sessionId, conn, log);
       }
       return result;
     };
@@ -403,31 +395,6 @@ async function sendAcpText(
       },
     },
   });
-}
-
-function sendAcpAvailableCommandsAfterSessionReady(
-  sessionId: string,
-  conn: AcpConnection | undefined,
-  log: ReturnType<typeof logger.child>
-): void {
-  if (!conn) {
-    return;
-  }
-
-  setTimeout(() => {
-    conn.sessionUpdate({
-      sessionId,
-      update: {
-        sessionUpdate: "available_commands_update",
-        availableCommands: getAcpAvailableCommandSpecs(),
-      },
-    }).catch((err) => {
-      log.warn("Failed to send delayed available_commands_update", {
-        sessionId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    });
-  }, 50);
 }
 
 // ─── Types ──────────────────────────────────────────────
