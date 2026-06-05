@@ -290,13 +290,13 @@ async function run() {
     // Use workspace-relative path that matches how Agent resolves paths
     const editTestPath = resolve(TEMPLATE_DIR, "acp-edit-test.txt");
     writeFileSync(editTestPath, "original content\nline 2\nline 3", "utf-8");
-    console.log(`  ${INFO} 发送: "把 /acp-edit-test.txt 的第一行改为 edited content"`);
+    console.log(`  ${INFO} 发送: "把 acp-edit-test.txt 的第一行改为 edited content"`);
     client.updates = [];
     client.permissions = [];
     client.autoApprove = true;
     await connection.prompt({
       sessionId: session.sessionId,
-      prompt: [{ type: "text", text: '把 /acp-edit-test.txt 的第一行改为 "edited content"。直接调用工具，不要问问题。' }],
+      prompt: [{ type: "text", text: '把 acp-edit-test.txt 的第一行改为 "edited content"。直接调用工具，不要问问题。' }],
     });
 
     const editedContent = existsSync(editTestPath) ? readFileSync(editTestPath, "utf-8") : "";
