@@ -40,13 +40,13 @@ async function callStdioMcpMethod(
     throw new Error(`MCP server "${server}" is not a stdio server; only command-based MCP servers are supported in this template runtime`);
   }
 
-  const timeoutMs = Number(process.env.MCP_TOOL_TIMEOUT_MS) || 30_000;
+  const timeoutMs = Number(process.env.MCP_TOOL_TIMEOUT_MS) || 0;
   const child = spawn(config.command, config.args ?? [], {
     env: resolveServerEnv(config),
     stdio: ["pipe", "pipe", "pipe"],
   });
 
-  type PendingEntry = { resolve: (result: unknown) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> };
+  type PendingEntry = { resolve: (result: unknown) => void; reject: (err: Error) => void; timer: ReturnType<typeof setTimeout> | undefined };
   let nextId = 1;
   const pending = new Map<number, PendingEntry>();
   const stderr: string[] = [];
@@ -85,7 +85,7 @@ async function callStdioMcpMethod(
   child.on("close", (code) => {
     if (pending.size > 0) {
       const err = new Error(`MCP server "${server}" exited unexpectedly (code ${code})${stderr.length ? ": " + stderr.join("").trim() : ""}`);
-      for (const [, entry] of pending) { clearTimeout(entry.timer); entry.reject(err); }
+      for (const [, entry] of pending) { if (entry.timer) clearTimeout(entry.timer); entry.reject(err); }
       pending.clear();
     }
   });
@@ -95,16 +95,22 @@ async function callStdioMcpMethod(
     const payload = JSON.stringify({ jsonrpc: "2.0", id, method, params });
 
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pending.delete(id);
-        reject(new Error(`MCP ${server}/${method} timed out after ${timeoutMs}ms`));
-      }, timeoutMs);
+      const timer = timeoutMs > 0
+        ? setTimeout(() => {
+            pending.delete(id);
+            reject(new Error(`MCP ${server}/${method} timed out after ${timeoutMs}ms`));
+          }, timeoutMs)
+        : undefined;
 
-      pending.set(id, { resolve, reject, timer });
+      pending.set(id, {
+        resolve,
+        reject,
+        timer: timer as ReturnType<typeof setTimeout>,
+      });
 
       child.stdin.write(`${payload}\n`, (err) => {
         if (err) {
-          clearTimeout(timer);
+          if (timer) clearTimeout(timer);
           pending.delete(id);
           reject(err);
         }
