@@ -16,7 +16,7 @@
  */
 
 import { DeepAgentsServer, type DeepAgentConfig } from "deepagents-acp";
-import { loadConfig, type ACPSessionConfig } from "./config-loader.js";
+import { loadConfig, resolveConfiguredWorkspaceRoot, type ACPSessionConfig } from "./config-loader.js";
 import { logger } from "./logger.js";
 import type { MCPManager } from "./mcp-manager.js";
 import { forwardAcpMcpServers } from "./mcp-acp-adapter.js";
@@ -25,6 +25,17 @@ import {
   createRuntimeContextAsync,
   buildAgentConfigParts,
 } from "./helpers.js";
+import {
+  executeSlashCommand,
+  getAcpSlashCommandSpecs,
+  type SlashToolInfo,
+} from "./slash-commands.js";
+import {
+  appendRuntimeMessage,
+  ensureSessionState,
+  getRuntimeStorage,
+  withRuntimeStorageContext,
+} from "./runtime-storage.js";
 
 // ─── Session Lifecycle Manager ──────────────────────────
 
@@ -34,6 +45,45 @@ interface SessionInfo {
   lastActivityAt: string;
   mode: string;
   messageCount: number;
+}
+
+interface AcpPromptBlock {
+  type?: string;
+  text?: string;
+}
+
+interface AcpPromptParams {
+  sessionId: string;
+  prompt: AcpPromptBlock[];
+}
+
+interface AcpConnection {
+  sessionUpdate(params: {
+    sessionId: string;
+    update: {
+      sessionUpdate: "agent_message_chunk";
+      content: {
+        type: "text";
+        text: string;
+      };
+    };
+  }): Promise<void>;
+}
+
+interface AcpSessionState {
+  id: string;
+  agentName: string;
+  mode?: string;
+}
+
+interface DeepAgentsServerInternals {
+  handleNewSession?: (...args: unknown[]) => Promise<unknown>;
+  handlePrompt?: (...args: unknown[]) => Promise<unknown>;
+  handleCancel?: (...args: unknown[]) => Promise<unknown>;
+  handleCloseSession?: (...args: unknown[]) => Promise<unknown>;
+  handleListSessions?: (...args: unknown[]) => Promise<unknown>;
+  sessions?: Map<string, AcpSessionState>;
+  agentConfigs?: Map<string, DeepAgentConfig>;
 }
 
 /**
@@ -119,11 +169,13 @@ function isAcpMcpForwardingEnabled(): boolean {
  */
 function patchSessionLifecycle(
   server: DeepAgentsServer,
-  mcpManager: MCPManager
+  mcpManager: MCPManager,
+  config: ReturnType<typeof loadConfig>,
+  workspaceRoot: string
 ): SessionManager {
   const log = logger.child("session-lifecycle");
   const manager = new SessionManager();
-  const s = server as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+  const s = server as unknown as DeepAgentsServerInternals;
   const mcpForwardingEnabled = isAcpMcpForwardingEnabled();
 
   if (!mcpForwardingEnabled) {
@@ -144,6 +196,10 @@ function patchSessionLifecycle(
       const result = await origNewSession(...args) as { sessionId: string } | undefined;
       if (result?.sessionId) {
         manager.track(result.sessionId, params?.mode ?? "agent");
+        ensureSessionState(
+          getRuntimeStorage({ workspaceRoot, sessionId: result.sessionId }),
+          { mode: params?.mode ?? "agent", agent: config.agent.name, environment: "acp" }
+        );
         // @rollback: remove this block when deepagents-acp supports MCP natively
         if (mcpForwardingEnabled && params.mcpServers) {
           sessionMcpServers.set(result.sessionId, params.mcpServers);
@@ -158,10 +214,34 @@ function patchSessionLifecycle(
   const origPrompt = s.handlePrompt?.bind(server);
   if (origPrompt) {
     s.handlePrompt = async (...args: unknown[]) => {
-      const params = args[0] as { sessionId: string; prompt: unknown[] };
+      const params = args[0] as AcpPromptParams;
+      const conn = args[1] as AcpConnection | undefined;
+      const promptText = getAcpPromptText(params.prompt);
+      const storage = getRuntimeStorage({ workspaceRoot, sessionId: params.sessionId });
+      if (promptText) {
+        appendRuntimeMessage({ role: "user", content: promptText }, storage);
+      }
+
+      const slashResult = await withRuntimeStorageContext({ workspaceRoot, sessionId: params.sessionId }, () =>
+        handleAcpSlashCommand({
+          server: s,
+          params,
+          conn,
+          config,
+          workspaceRoot,
+        })
+      );
+
+      if (slashResult) {
+        manager.touch(params.sessionId);
+        return slashResult;
+      }
 
       try {
-        const result = await origPrompt(...args);
+        const result = await withRuntimeStorageContext(
+          { workspaceRoot, sessionId: params.sessionId },
+          () => origPrompt(...args)
+        );
         // Only count successful prompts
         manager.touch(params.sessionId);
         return result;
@@ -220,10 +300,95 @@ function patchSessionLifecycle(
   };
 
   log.info("Session lifecycle patch applied", {
-    features: ["tracking", "close", "list"],
+    features: ["tracking", "close", "list", "slash-commands"],
   });
 
   return manager;
+}
+
+async function handleAcpSlashCommand(options: {
+  server: DeepAgentsServerInternals;
+  params: AcpPromptParams;
+  conn?: AcpConnection;
+  config: ReturnType<typeof loadConfig>;
+  workspaceRoot: string;
+}): Promise<{ stopReason: "end_turn" } | null> {
+  const text = getAcpPromptText(options.params.prompt);
+  if (!text?.startsWith("/")) {
+    return null;
+  }
+
+  const session = options.server.sessions?.get(options.params.sessionId);
+  const agentConfig = session
+    ? options.server.agentConfigs?.get(session.agentName)
+    : undefined;
+
+  const result = executeSlashCommand(text, {
+    environment: "acp",
+    tools: toSlashToolInfo(agentConfig?.tools),
+    config: options.config,
+    workspaceRoot: options.workspaceRoot,
+    mode: session?.mode,
+    sessionId: session?.id,
+  });
+
+  if (!result) {
+    return null;
+  }
+
+  if (result.text && options.conn) {
+    await sendAcpText(options.params.sessionId, options.conn, result.text);
+    appendRuntimeMessage(
+      { role: "assistant", content: result.text },
+      getRuntimeStorage({ workspaceRoot: options.workspaceRoot, sessionId: options.params.sessionId })
+    );
+  }
+
+  return { stopReason: "end_turn" };
+}
+
+function getAcpPromptText(prompt: AcpPromptBlock[]): string | null {
+  const block = prompt.find((candidate) => candidate.type === "text" && candidate.text);
+  return block?.text?.trim() ?? null;
+}
+
+function toSlashToolInfo(tools: unknown): SlashToolInfo[] {
+  if (!Array.isArray(tools)) {
+    return [];
+  }
+
+  const result: SlashToolInfo[] = [];
+  for (const tool of tools) {
+    const candidate = tool as { name?: unknown; description?: unknown };
+    if (typeof candidate.name !== "string") {
+      continue;
+    }
+
+    const info: SlashToolInfo = { name: candidate.name };
+    if (typeof candidate.description === "string") {
+      info.description = candidate.description;
+    }
+    result.push(info);
+  }
+
+  return result;
+}
+
+async function sendAcpText(
+  sessionId: string,
+  conn: AcpConnection,
+  text: string
+): Promise<void> {
+  await conn.sessionUpdate({
+    sessionId,
+    update: {
+      sessionUpdate: "agent_message_chunk",
+      content: {
+        type: "text",
+        text,
+      },
+    },
+  });
 }
 
 // ─── Types ──────────────────────────────────────────────
@@ -254,12 +419,13 @@ export async function bootstrap(options: ACPServerOptions = {}): Promise<void> {
     process.env.LOG_LEVEL = "debug";
   }
 
-  const workspaceRoot = options.workspaceRoot || process.cwd();
+  const sessionConfig = options.sessionConfig ?? loadSessionConfigFromEnv();
+  const initialWorkspaceRoot = options.workspaceRoot || sessionConfig?.cwd || process.cwd();
 
   log.info("Bootstrapping DeepAgents app agent", {
     acp: options.acp,
     debug: options.debug,
-    workspaceRoot,
+    workspaceRoot: initialWorkspaceRoot,
   });
 
   // Diagnostic: log effective model env vars (mask API key)
@@ -269,8 +435,6 @@ export async function bootstrap(options: ACPServerOptions = {}): Promise<void> {
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? "***" : "(unset)",
     ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN ? "***" : "(unset)",
   });
-
-  const sessionConfig = options.sessionConfig ?? loadSessionConfigFromEnv();
 
   // Validate that at least one model credential is available
   if (
@@ -286,7 +450,9 @@ export async function bootstrap(options: ACPServerOptions = {}): Promise<void> {
   const config = loadConfig({
     configPath: options.configPath,
     sessionConfig,
+    workspaceRoot: initialWorkspaceRoot,
   });
+  const workspaceRoot = resolveConfiguredWorkspaceRoot(config, initialWorkspaceRoot);
 
   if (options.acp === false) {
     log.info("ACP mode disabled — skipping server start");
@@ -313,7 +479,7 @@ export async function bootstrap(options: ACPServerOptions = {}): Promise<void> {
   });
 
   // Pass mcpManager so ACP session mcpServers can be forwarded
-  const _sessionManager = patchSessionLifecycle(server, mcpManager);
+  const _sessionManager = patchSessionLifecycle(server, mcpManager, config, workspaceRoot);
   log.info("Active sessions after startup", { count: _sessionManager.count });
   await server.start();
 }
@@ -341,6 +507,7 @@ export function buildACPAgentConfig(
     // ACP-specific fields
     name: config.agent.name,
     description: config.agent.description,
+    commands: getAcpSlashCommandSpecs(),
 
     // CreateDeepAgentParams fields (via shared helper)
     ...buildAgentConfigParts(config, sessionConfig, workspaceRoot, runtimeCtx.tools),
@@ -368,6 +535,7 @@ export async function buildACPAgentConfigAsync(
   const agentConfig: DeepAgentConfig = {
     name: config.agent.name,
     description: config.agent.description,
+    commands: getAcpSlashCommandSpecs(),
     ...buildAgentConfigParts(config, sessionConfig, workspaceRoot, runtimeCtx.tools),
     // Do NOT set backend — DeepAgentsServer creates ACPFilesystemBackend automatically,
     // which provides IDE integration (unsaved buffer reads via ACP client).
@@ -397,6 +565,7 @@ export async function buildACPAgentConfigWithMcpAsync(
   const agentConfig: DeepAgentConfig = {
     name: config.agent.name,
     description: config.agent.description,
+    commands: getAcpSlashCommandSpecs(),
     ...buildAgentConfigParts(config, sessionConfig, workspaceRoot, runtimeCtx.tools),
   };
 

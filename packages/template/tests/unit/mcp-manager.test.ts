@@ -33,6 +33,18 @@ describe("MCPManager", () => {
     expect(servers).toContain("context7");
   });
 
+  it("loads inline default MCP servers", () => {
+    const manager = new MCPManager({
+      defaultConfig: {
+        servers: {
+          inline: { command: "inline-mcp" },
+        },
+      },
+    });
+
+    expect(manager.getServer("inline")?.command).toBe("inline-mcp");
+  });
+
   it("returns empty list when no default config", () => {
     const manager = new MCPManager({ defaultConfigPath: "/nonexistent.json" });
     expect(manager.listServers()).toEqual([]);

@@ -17,6 +17,7 @@
  *   --config <path>     Use a custom config file
  *   --prompt <name>     Use a named prompt (e.g., code-assistant)
  *   --system-prompt <s> Override the system prompt text
+ *   --cwd <path>        Set the project workspace root
  *
  * Examples:
  *   npx tsx src/index.ts                        # Start ACP server
@@ -49,6 +50,7 @@ interface ParsedArgs {
   configPath?: string;
   promptPath?: string;
   systemPrompt?: string;
+  workspaceRoot?: string;
   showHelp: boolean;
 }
 
@@ -82,6 +84,9 @@ function parseArgs(argv: string[]): ParsedArgs {
       i += 2;
     } else if (a === "--system-prompt" && i + 1 < argv.length) {
       args.systemPrompt = argv[i + 1];
+      i += 2;
+    } else if ((a === "--cwd" || a === "--working-dir") && i + 1 < argv.length) {
+      args.workspaceRoot = resolve(process.cwd(), argv[i + 1]);
       i += 2;
     } else if (a.startsWith("--")) {
       console.error(`Unknown flag: ${a}`);
@@ -143,6 +148,7 @@ DeepAgents Dev Templates — Multi-mode Entry Point
   --config <path>        使用自定义配置文件
   --prompt-file <path>   使用自定义系统提示词文件
   --system-prompt <s>    直接指定系统提示词
+  --cwd <path>           指定项目工作目录
   --no-acp               禁用 ACP 模式
   --help, -h             显示此帮助
 
@@ -190,12 +196,13 @@ async function main(): Promise<void> {
     configPath: args.configPath,
     promptPath: args.promptPath,
     systemPrompt: args.systemPrompt,
+    workspaceRoot: args.workspaceRoot,
   };
 
   try {
     switch (args.command) {
       case "acp":
-        await bootstrap({ acp: true, debug: args.debug, configPath: args.configPath });
+        await bootstrap({ acp: true, debug: args.debug, configPath: args.configPath, workspaceRoot: args.workspaceRoot });
         break;
 
       case "chat":

@@ -14,6 +14,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { getRuntimeStorage, listSessions } from "../../runtime/runtime-storage.js";
 
 const HISTORY_DIR = "conversation_history";
 
@@ -63,32 +64,59 @@ function searchLines(content: string, query: string, maxResults: number): string
 
 export const conversationHistoryTool = tool(
   async ({ operation, query, maxResults }) => {
+    const storage = getRuntimeStorage();
     const historyDir = resolve(process.cwd(), HISTORY_DIR);
 
     try {
       switch (operation) {
         case "list": {
+          const sessions = listSessions(storage.workspaceRoot);
+          const archivedFiles = existsSync(historyDir)
+            ? readdirSync(historyDir).filter(f => f.endsWith(".md"))
+            : [];
+
+          if (sessions.length > 0) {
+            return [
+              `Found ${sessions.length} session(s):`,
+              ...sessions.map((session) =>
+                `- ${session.sessionId} (${session.updatedAt ?? "unknown time"}) messages=${session.messageCount ?? 0}`
+              ),
+              archivedFiles.length > 0 ? `\nLegacy history files:\n${archivedFiles.map(f => `- ${f}`).join("\n")}` : "",
+            ].filter(Boolean).join("\n");
+          }
+
           if (!existsSync(historyDir)) {
             return "No conversation history found. History is created when summarization middleware offloads old messages.";
           }
-          const files = readdirSync(historyDir).filter(f => f.endsWith(".md"));
-          if (files.length === 0) {
+          if (archivedFiles.length === 0) {
             return "No conversation history files found.";
           }
-          return `Found ${files.length} history file(s):\n${files.map(f => `- ${f}`).join("\n")}`;
+          return `Found ${archivedFiles.length} history file(s):\n${archivedFiles.map(f => `- ${f}`).join("\n")}`;
         }
 
         case "search": {
           if (!query) return "Error: query is required for search operation";
+          const allResults: string[] = [];
+          const sessionContent = readSessionMessages(storage.messagesPath);
+          if (sessionContent) {
+            const matches = searchLines(sessionContent, query, maxResults ?? 5);
+            if (matches.length > 0) {
+              allResults.push(`\n## ${storage.sessionId}/messages.jsonl`);
+              allResults.push(...matches);
+            }
+          }
+
           if (!existsSync(historyDir)) {
+            if (allResults.length > 0) {
+              return `Search results for "${query}":\n${allResults.join("\n\n")}`;
+            }
             return "No conversation history directory found.";
           }
           const files = readdirSync(historyDir).filter(f => f.endsWith(".md"));
-          if (files.length === 0) {
+          if (files.length === 0 && allResults.length === 0) {
             return "No conversation history files to search.";
           }
 
-          const allResults: string[] = [];
           for (const file of files) {
             const content = readFileSync(resolve(historyDir, file), "utf-8");
             const matches = searchLines(content, query, maxResults ?? 5);
@@ -105,6 +133,10 @@ export const conversationHistoryTool = tool(
         }
 
         case "read": {
+          const sessionContent = readSessionMessages(storage.messagesPath);
+          if (sessionContent) {
+            return truncate(sessionContent);
+          }
           if (!existsSync(historyDir)) {
             return "No conversation history directory found.";
           }
@@ -115,11 +147,7 @@ export const conversationHistoryTool = tool(
           // Read the most recent file
           const latestFile = allFiles[allFiles.length - 1]!;
           const content = readFileSync(resolve(historyDir, latestFile), "utf-8");
-          // Truncate if too long
-          if (content.length > 10000) {
-            return content.slice(0, 10000) + "\n\n... [truncated, total length: " + content.length + " chars]";
-          }
-          return content;
+          return truncate(content);
         }
 
         default:
@@ -144,3 +172,18 @@ Operations:
     }),
   }
 );
+
+function readSessionMessages(messagesPath: string): string | null {
+  if (!existsSync(messagesPath)) {
+    return null;
+  }
+  const content = readFileSync(messagesPath, "utf-8").trim();
+  return content ? content : null;
+}
+
+function truncate(content: string): string {
+  if (content.length > 10000) {
+    return content.slice(0, 10000) + "\n\n... [truncated, total length: " + content.length + " chars]";
+  }
+  return content;
+}

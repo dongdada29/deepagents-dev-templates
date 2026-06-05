@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -26,6 +26,8 @@ describe("config-loader", () => {
     delete process.env.MCP_CONFIG_PATH;
     delete process.env.LOG_LEVEL;
     delete process.env.ACP_DEBUG;
+    delete process.env.DEEPAGENTS_HOME;
+    process.env.DEEPAGENTS_HOME = join(tmpDir, "home");
   });
 
   afterEach(() => {
@@ -40,6 +42,10 @@ describe("config-loader", () => {
     expect(config.model.provider).toBe("anthropic");
     expect(config.model.name).toBe("claude-sonnet-4-6");
     expect(config.platform.apiBaseUrl).toBe("https://api.nuwax.com");
+    expect(config.skills.directories).toContain("~/.deepagents/skills");
+    expect(config.skills.directories).toContain("./.deepagents/skills");
+    expect(config.agentsDirectories).toContain("~/.deepagents");
+    expect(config.agentsDirectories).toContain("./.deepagents");
   });
 
   it("loads config from a custom file", async () => {
@@ -132,5 +138,125 @@ describe("config-loader", () => {
     const { loadConfig } = await import("../../src/runtime/config-loader.js");
     const config = loadConfig();
     expect(config.platform.apiBaseUrl).toBe("https://api.nuwax.com");
+  });
+
+  it("loads user, project, template, env, and session layers in order", async () => {
+    const userDir = join(tmpDir, "home");
+    const projectDir = join(tmpDir, "workspace");
+    mkdirSync(join(userDir), { recursive: true });
+    mkdirSync(join(projectDir, ".deepagents"), { recursive: true });
+
+    writeFileSync(join(userDir, "config.json"), JSON.stringify({
+      agent: { name: "user-agent" },
+      skills: { directories: ["~/.deepagents/skills"] },
+    }));
+    writeFileSync(join(projectDir, ".deepagents", "config.json"), JSON.stringify({
+      agent: { name: "project-agent" },
+      skills: { directories: ["./.deepagents/skills"] },
+    }));
+    const templateConfig = join(tmpDir, "template.json");
+    writeFileSync(templateConfig, JSON.stringify({
+      agent: { name: "template-agent" },
+      skills: { directories: ["./skills/builtin"] },
+    }));
+    process.env.ACP_AGENT_NAME = "env-agent";
+
+    const { loadConfig } = await import("../../src/runtime/config-loader.js");
+    const config = loadConfig({
+      configPath: templateConfig,
+      workspaceRoot: projectDir,
+      sessionConfig: { model: "session-model" },
+    });
+
+    expect(config.agent.name).toBe("env-agent");
+    expect(config.model.name).toBe("session-model");
+    expect(config.skills.directories).toContain("~/.deepagents/skills");
+    expect(config.skills.directories).toContain("./.deepagents/skills");
+    expect(config.skills.directories).toContain("./skills/builtin");
+  });
+
+  it("loads models.json and user/project mcp.json as config layers", async () => {
+    const userDir = join(tmpDir, "home");
+    const projectDir = join(tmpDir, "workspace");
+    mkdirSync(userDir, { recursive: true });
+    mkdirSync(join(projectDir, ".deepagents"), { recursive: true });
+    writeFileSync(join(userDir, "models.json"), JSON.stringify({
+      default: { provider: "openai", name: "gpt-test" },
+    }));
+    writeFileSync(join(userDir, "mcp.json"), JSON.stringify({ servers: { user: { command: "echo" } } }));
+    writeFileSync(join(projectDir, ".deepagents", "mcp.json"), JSON.stringify({ servers: { project: { command: "echo" } } }));
+
+    const { loadConfig } = await import("../../src/runtime/config-loader.js");
+    const config = loadConfig({
+      configPath: "/nonexistent.json",
+      workspaceRoot: projectDir,
+    });
+
+    expect(config.model.provider).toBe("openai");
+    expect(config.model.name).toBe("gpt-test");
+    expect(config.mcp.configPaths).toContain(join(userDir, "mcp.json"));
+    expect(config.mcp.configPaths).toContain(join(projectDir, ".deepagents", "mcp.json"));
+  });
+
+  it("uses user-level workingDir to find project .deepagents config", async () => {
+    const userDir = join(tmpDir, "home");
+    const projectDir = join(tmpDir, "configured-workspace");
+    mkdirSync(userDir, { recursive: true });
+    mkdirSync(join(projectDir, ".deepagents"), { recursive: true });
+    writeFileSync(join(userDir, "config.json"), JSON.stringify({
+      workspace: { workingDir: projectDir },
+    }));
+    writeFileSync(join(projectDir, ".deepagents", "config.json"), JSON.stringify({
+      agent: { name: "workspace-agent" },
+    }));
+
+    const { loadConfig, resolveConfiguredWorkspaceRoot } = await import("../../src/runtime/config-loader.js");
+    const config = loadConfig({ configPath: "/nonexistent.json" });
+
+    expect(resolveConfiguredWorkspaceRoot(config, tmpDir)).toBe(projectDir);
+    expect(config.agent.name).toBe("workspace-agent");
+  });
+
+  it("loads plugin manifests from user and project plugin directories", async () => {
+    const userDir = join(tmpDir, "home");
+    const projectDir = join(tmpDir, "workspace");
+    const userPlugin = join(userDir, "plugins", "global-plugin");
+    const projectPlugin = join(projectDir, ".deepagents", "plugins", "project-plugin");
+    mkdirSync(userPlugin, { recursive: true });
+    mkdirSync(projectPlugin, { recursive: true });
+
+    writeFileSync(join(userPlugin, "plugin.json"), JSON.stringify({
+      id: "global-plugin",
+      skillsDirectories: ["skills"],
+      agentsDirectories: ["agents-root"],
+      mcpServers: {
+        globalPluginServer: { command: "global-plugin-mcp" },
+      },
+    }));
+    writeFileSync(join(projectPlugin, "plugin.json"), JSON.stringify({
+      id: "project-plugin",
+      hooks: [
+        {
+          event: "pre_tool_use",
+          matcher: "^execute$",
+          command: "echo ok",
+        },
+      ],
+      mcp: {
+        configPath: "mcp.json",
+      },
+    }));
+
+    const { loadConfig } = await import("../../src/runtime/config-loader.js");
+    const config = loadConfig({
+      configPath: "/nonexistent.json",
+      workspaceRoot: projectDir,
+    });
+
+    expect(config.skills.directories).toContain(join(userPlugin, "skills"));
+    expect(config.agentsDirectories).toContain(join(userPlugin, "agents-root"));
+    expect(config.mcp.servers.globalPluginServer).toEqual({ command: "global-plugin-mcp" });
+    expect(config.mcp.configPaths).toContain(join(projectPlugin, "mcp.json"));
+    expect(config.hooks.some((hook) => hook.command === "echo ok")).toBe(true);
   });
 });

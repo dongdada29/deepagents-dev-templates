@@ -18,9 +18,17 @@ import * as readline from "node:readline";
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createAppAgentAsync } from "../runtime/agent-factory.js";
-import { loadConfig } from "../runtime/config-loader.js";
+import { loadConfig, resolveConfiguredWorkspaceRoot } from "../runtime/config-loader.js";
 import { resolveCliSystemPrompt } from "../runtime/helpers.js";
 import { logger } from "../runtime/logger.js";
+import { executeSlashCommand } from "../runtime/slash-commands.js";
+import {
+  appendRuntimeMessage,
+  createSessionId,
+  ensureSessionState,
+  getRuntimeStorage,
+  withRuntimeStorageContext,
+} from "../runtime/runtime-storage.js";
 
 const log = logger.child("repl");
 
@@ -41,31 +49,27 @@ interface ConversationTurn {
   timestamp: string;
 }
 
-const HELP_TEXT = `
-可用命令:
-  /help              显示此帮助信息
-  /tools             列出当前 Agent 可用的工具
-  /config            显示当前配置（模型、平台、技能）
-  /clear             清屏
-  /save <path>       保存对话历史到 JSON 文件
-  /exit 或 /quit     退出 REPL (也可按 Ctrl+D)
-`;
-
 /**
  * Start the interactive REPL.
  */
 export async function startRepl(options: ReplOptions = {}): Promise<void> {
-  const config = loadConfig({ configPath: options.configPath });
-  const workspaceRoot = options.workspaceRoot || process.cwd();
+  const initialWorkspaceRoot = options.workspaceRoot || process.cwd();
+  const config = loadConfig({ configPath: options.configPath, workspaceRoot: initialWorkspaceRoot });
+  const workspaceRoot = resolveConfiguredWorkspaceRoot(config, initialWorkspaceRoot);
+  const sessionId = process.env.DEEPAGENTS_SESSION_ID || createSessionId("cli");
+  const storage = getRuntimeStorage({ workspaceRoot, sessionId });
+  ensureSessionState(storage, { mode: "cli", agent: config.agent.name });
 
   // Resolve system prompt (CLI > file > config defaults)
-  const systemPrompt = resolveCliSystemPrompt(options);
+  const systemPrompt = resolveCliSystemPrompt({ ...options, workspaceRoot, config });
 
   console.log("\n\x1b[36m╔════════════════════════════════════════╗");
   console.log("║   DeepAgents Interactive REPL          ║");
   console.log("╚════════════════════════════════════════╝\x1b[0m");
   console.log(`\x1b[2mAgent: ${config.agent.name} | Model: ${config.model.provider}:${config.model.name}\x1b[0m`);
   console.log(`\x1b[2mWorkspace: ${workspaceRoot}\x1b[0m`);
+  console.log(`\x1b[2mSession: ${sessionId}\x1b[0m`);
+  console.log(`\x1b[2mStorage: ${storage.sessionDir}\x1b[0m`);
   console.log(`\x1b[2mMode: ${config.platform.agentId ? "platform" : "local-only"}\x1b[0m`);
   console.log(`\x1b[2mType /help for commands. Press Ctrl+D to exit.\x1b[0m\n`);
 
@@ -118,10 +122,21 @@ export async function startRepl(options: ReplOptions = {}): Promise<void> {
 
     // Handle special commands
     if (input.startsWith("/")) {
-      const handled = await handleCommand(input, { context, config, history, workspaceRoot });
-      if (handled === "exit") {
+      const handled = executeSlashCommand(input, {
+        environment: "cli",
+        tools: context.tools,
+        config,
+        workspaceRoot,
+        sessionId,
+        clearScreen: () => console.clear(),
+        saveHistory: (path) => saveHistory(history, path),
+      });
+      if (handled?.kind === "exit") {
         cleanup();
         return;
+      }
+      if (handled?.text) {
+        console.log(`\n${handled.text}\n`);
       }
       rl.prompt();
       return;
@@ -130,11 +145,15 @@ export async function startRepl(options: ReplOptions = {}): Promise<void> {
     // Send to agent
     try {
       process.stdout.write("\x1b[36m\n");
-      const response = await agent.invoke({
-        messages: [...messages, { role: "user", content: input }],
-      });
+      appendRuntimeMessage({ role: "user", content: input }, storage);
+      const response = await withRuntimeStorageContext({ workspaceRoot, sessionId }, () =>
+        agent.invoke({
+          messages: [...messages, { role: "user", content: input }],
+        })
+      );
 
       const assistantContent = extractContent(response);
+      appendRuntimeMessage({ role: "assistant", content: assistantContent }, storage);
       process.stdout.write("\x1b[0m");
 
       // Save to history
@@ -165,69 +184,6 @@ export async function startRepl(options: ReplOptions = {}): Promise<void> {
 }
 
 // ─── Helpers ────────────────────────────────────────────
-
-/**
- * Handle a slash command. Returns "exit" if the user wants to quit.
- */
-async function handleCommand(
-  cmd: string,
-  ctx: {
-    context: { tools: Array<{ name: string; description?: string }> };
-    config: { agent: { name: string; description: string }; model: { provider: string; name: string }; platform: { agentId: string }; skills: { directories: string[] } };
-    history: ConversationTurn[];
-    workspaceRoot: string;
-  }
-): Promise<string | void> {
-  const [name, ...args] = cmd.split(/\s+/);
-  const arg = args.join(" ");
-
-  switch (name) {
-    case "/help":
-    case "/?":
-      console.log(HELP_TEXT);
-      return;
-
-    case "/tools":
-      console.log("\n可用工具:");
-      for (const tool of ctx.context.tools) {
-        const desc = tool.description?.split("\n")[0]?.slice(0, 80) || "(no description)";
-        console.log(`  \x1b[33m${tool.name}\x1b[0m — ${desc}`);
-      }
-      console.log();
-      return;
-
-    case "/config":
-      console.log("\n当前配置:");
-      console.log(`  Agent:    ${ctx.config.agent.name}`);
-      console.log(`  Model:    ${ctx.config.model.provider}:${ctx.config.model.name}`);
-      console.log(`  Platform: ${ctx.config.platform.agentId || "(local-only mode)"}`);
-      console.log(`  Skills:   ${ctx.config.skills.directories.join(", ")}`);
-      console.log(`  Workspace: ${ctx.workspaceRoot}`);
-      console.log();
-      return;
-
-    case "/clear":
-      console.clear();
-      return;
-
-    case "/save":
-      if (!arg) {
-        console.log("\x1b[31mError: /save requires a file path\x1b[0m");
-        return;
-      }
-      saveHistory(ctx.history, arg);
-      return;
-
-    case "/exit":
-    case "/quit":
-      return "exit";
-
-    default:
-      console.log(`\x1b[31mUnknown command: ${name}\x1b[0m — type /help for available commands`);
-      return;
-  }
-}
-
 
 /**
  * Extract text content from an agent invoke response.

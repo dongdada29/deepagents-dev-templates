@@ -8,9 +8,16 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { createAppAgentAsync } from "../runtime/agent-factory.js";
-import { loadConfig } from "../runtime/config-loader.js";
+import { loadConfig, resolveConfiguredWorkspaceRoot } from "../runtime/config-loader.js";
 import { resolveCliSystemPrompt } from "../runtime/helpers.js";
 import { logger } from "../runtime/logger.js";
+import {
+  appendRuntimeMessage,
+  createSessionId,
+  ensureSessionState,
+  getRuntimeStorage,
+  withRuntimeStorageContext,
+} from "../runtime/runtime-storage.js";
 
 const log = logger.child("one-shot");
 
@@ -32,9 +39,13 @@ export async function runOneShot(
   prompt: string,
   options: OneShotOptions = {}
 ): Promise<void> {
-  const config = loadConfig({ configPath: options.configPath });
-  const workspaceRoot = options.workspaceRoot || process.cwd();
-  const systemPrompt = resolveCliSystemPrompt(options);
+  const initialWorkspaceRoot = options.workspaceRoot || process.cwd();
+  const config = loadConfig({ configPath: options.configPath, workspaceRoot: initialWorkspaceRoot });
+  const workspaceRoot = resolveConfiguredWorkspaceRoot(config, initialWorkspaceRoot);
+  const systemPrompt = resolveCliSystemPrompt({ ...options, workspaceRoot, config });
+  const sessionId = process.env.DEEPAGENTS_SESSION_ID || createSessionId("run");
+  const storage = getRuntimeStorage({ workspaceRoot, sessionId });
+  ensureSessionState(storage, { mode: "one-shot", agent: config.agent.name });
 
   log.info("Creating agent for one-shot prompt");
   // Pass systemPrompt via sessionConfig so createAppAgent routes it
@@ -45,10 +56,14 @@ export async function runOneShot(
   });
 
   try {
-    const response = await agent.invoke({
-      messages: [{ role: "user" as const, content: prompt }],
-    });
+    appendRuntimeMessage({ role: "user", content: prompt }, storage);
+    const response = await withRuntimeStorageContext({ workspaceRoot, sessionId }, () =>
+      agent.invoke({
+        messages: [{ role: "user" as const, content: prompt }],
+      })
+    );
     const content = extractContent(response);
+    appendRuntimeMessage({ role: "assistant", content }, storage);
     console.log(content);
   } catch (err) {
     console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);

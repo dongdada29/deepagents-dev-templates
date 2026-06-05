@@ -13,6 +13,7 @@
  */
 
 import { createMiddleware, ToolMessage } from "langchain";
+import { spawn } from "node:child_process";
 import { logger } from "../../runtime/logger.js";
 
 // ─── Types ──────────────────────────────────────────────
@@ -59,9 +60,26 @@ export interface HookDefinition {
   toolPattern?: RegExp;
 }
 
+export interface ConfiguredHook {
+  event:
+    | "pre_tool_use"
+    | "post_tool_use"
+    | "post_tool_use_failure"
+    | "before_model_request"
+    | "after_model_request"
+    | "before_run"
+    | "after_run";
+  matcher?: string;
+  command: string;
+  timeoutMs?: number;
+  priority?: number;
+  scope?: "user" | "project";
+}
+
 // ─── Registry ───────────────────────────────────────────
 
 const hooks: HookDefinition[] = [];
+const configuredHookNames = new Set<string>();
 
 /**
  * Register a lifecycle hook.
@@ -86,6 +104,33 @@ export function unregisterHook(name: string): void {
  */
 export function getHooks(event: HookEvent): HookDefinition[] {
   return hooks.filter(h => h.event === event);
+}
+
+export function registerConfiguredHooks(configuredHooks: ConfiguredHook[], workspaceRoot: string): void {
+  configuredHooks.forEach((configuredHook, index) => {
+    const event = mapConfiguredEvent(configuredHook.event);
+    if (!event) {
+      logger.warn("Configured hook event is not supported by middleware yet", {
+        event: configuredHook.event,
+        command: configuredHook.command,
+      });
+      return;
+    }
+
+    const name = `configured:${configuredHook.scope ?? "config"}:${index}:${configuredHook.event}:${configuredHook.command}`;
+    if (configuredHookNames.has(name)) {
+      return;
+    }
+
+    registerHook({
+      name,
+      event,
+      priority: configuredHook.priority,
+      toolPattern: configuredHook.matcher ? new RegExp(configuredHook.matcher) : undefined,
+      handler: (ctx) => runCommandHook(configuredHook, ctx, workspaceRoot),
+    });
+    configuredHookNames.add(name);
+  });
 }
 
 /**
@@ -113,6 +158,111 @@ async function executeHooks(event: HookEvent, ctx: HookContext): Promise<HookRes
     }
   }
   return results;
+}
+
+function mapConfiguredEvent(event: ConfiguredHook["event"]): HookEvent | null {
+  switch (event) {
+    case "pre_tool_use":
+      return "pre_tool_use";
+    case "post_tool_use":
+      return "post_tool_use";
+    case "post_tool_use_failure":
+      return "post_tool_error";
+    case "before_model_request":
+      return "before_model";
+    case "after_model_request":
+      return "after_model";
+    default:
+      return null;
+  }
+}
+
+async function runCommandHook(
+  hook: ConfiguredHook,
+  ctx: HookContext,
+  workspaceRoot: string
+): Promise<HookResult | void> {
+  const input = JSON.stringify({
+    event: hook.event,
+    toolName: ctx.toolName,
+    args: ctx.args,
+    result: ctx.result,
+    error: ctx.error?.message,
+    timestamp: ctx.timestamp,
+    workspaceRoot,
+  });
+  const { code, stdout, stderr } = await runShellCommand(hook.command, input, workspaceRoot, hook.timeoutMs ?? 30_000);
+
+  if (stderr.trim()) {
+    logger.warn("Configured hook wrote to stderr", {
+      event: hook.event,
+      command: hook.command,
+      stderr: stderr.slice(0, 1000),
+    });
+  }
+
+  const parsed = parseHookStdout(stdout);
+  if (code === 2) {
+    return {
+      prevent: true,
+      replacementResult:
+        parsed?.replacementResult ??
+        (stdout.trim() || `Tool execution blocked by configured hook: ${hook.command}`),
+    };
+  }
+
+  if (code !== 0) {
+    logger.warn("Configured hook exited non-zero", {
+      event: hook.event,
+      command: hook.command,
+      code,
+    });
+    return undefined;
+  }
+
+  return parsed;
+}
+
+function runShellCommand(
+  command: string,
+  input: string,
+  cwd: string,
+  timeoutMs: number
+): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(process.env.SHELL || "sh", ["-lc", command], { cwd });
+    let stdout = "";
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      resolve({ code: 124, stdout, stderr: `${stderr}\nHook timed out after ${timeoutMs}ms` });
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf-8");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf-8");
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code: code ?? 0, stdout, stderr });
+    });
+    child.stdin.end(input);
+  });
+}
+
+function parseHookStdout(stdout: string): HookResult | undefined {
+  const trimmed = stdout.trim();
+  if (!trimmed.startsWith("{")) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as HookResult;
+    return parsed;
+  } catch {
+    return undefined;
+  }
 }
 
 // ─── Middleware Factory ─────────────────────────────────

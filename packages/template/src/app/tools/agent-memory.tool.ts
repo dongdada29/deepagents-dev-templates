@@ -2,7 +2,7 @@
  * Agent Memory Tool
  *
  * Provides read/write/update operations for per-agent memory files.
- * Memory is stored at .agent-memory/{agent-name}/MEMORY.md
+ * Memory is stored at ~/.deepagents/workspaces/<workspace>/memory/{agent-name}/MEMORY.md
  * and persists across conversations.
  *
  * Inspired by pydantic-deepagents' AgentMemoryToolset.
@@ -11,17 +11,12 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-
-const MEMORY_DIR = ".agent-memory";
+import { dirname } from "node:path";
+import { memoryPath, readableMemoryPath } from "../../runtime/runtime-storage.js";
 
 /** Escape regex metacharacters in a string for safe use in RegExp */
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function getMemoryPath(agentName: string): string {
-  return resolve(process.cwd(), MEMORY_DIR, agentName, "MEMORY.md");
 }
 
 /** Resolve agent name with unique fallback to avoid collisions */
@@ -34,15 +29,16 @@ function resolveAgentName(): string {
 export const agentMemoryTool = tool(
   async ({ operation, key, content }) => {
     const agentName = resolveAgentName();
-    const memoryPath = getMemoryPath(agentName);
+    const writePath = memoryPath(agentName);
+    const readPath = readableMemoryPath(agentName);
 
     try {
       switch (operation) {
         case "read": {
-          if (!existsSync(memoryPath)) {
+          if (!existsSync(readPath)) {
             return "No memory file found. Use write_memory to create one.";
           }
-          const fullContent = readFileSync(memoryPath, "utf-8");
+          const fullContent = readFileSync(readPath, "utf-8");
           if (key) {
             const escaped = escapeRegex(key);
             const regex = new RegExp(`## ${escaped}\\n([\\s\\S]*?)(?=\\n## |$)`, "i");
@@ -54,12 +50,14 @@ export const agentMemoryTool = tool(
 
         case "write": {
           if (!content) return "Error: content is required for write operation";
-          mkdirSync(dirname(memoryPath), { recursive: true });
+          mkdirSync(dirname(writePath), { recursive: true });
           if (key) {
             const escaped = escapeRegex(key);
             let existing = "";
-            if (existsSync(memoryPath)) {
-              existing = readFileSync(memoryPath, "utf-8");
+            if (existsSync(writePath)) {
+              existing = readFileSync(writePath, "utf-8");
+            } else if (existsSync(readPath)) {
+              existing = readFileSync(readPath, "utf-8");
             }
             const regex = new RegExp(`## ${escaped}\\n[\\s\\S]*?(?=\\n## |$)`, "i");
             const section = `## ${key}\n${content}\n`;
@@ -68,19 +66,19 @@ export const agentMemoryTool = tool(
             } else {
               existing = existing.trimEnd() + "\n\n" + section;
             }
-            writeFileSync(memoryPath, existing, "utf-8");
-            return `Updated section "${key}" in memory.`;
+            writeFileSync(writePath, existing, "utf-8");
+            return `Updated section "${key}" in memory.\nPath: ${writePath}`;
           } else {
-            writeFileSync(memoryPath, content, "utf-8");
-            return "Memory file written.";
+            writeFileSync(writePath, content, "utf-8");
+            return `Memory file written.\nPath: ${writePath}`;
           }
         }
 
         case "list": {
-          if (!existsSync(memoryPath)) {
+          if (!existsSync(readPath)) {
             return "No memory file found.";
           }
-          const fileContent = readFileSync(memoryPath, "utf-8");
+          const fileContent = readFileSync(readPath, "utf-8");
           const headings = fileContent.match(/^## .+$/gm);
           if (!headings || headings.length === 0) {
             return "Memory file exists but has no sections.";
@@ -102,7 +100,8 @@ export const agentMemoryTool = tool(
 - write: Write/append content, optionally to a specific section (by key)
 - list: List all memory section headings
 
-Memory persists across conversations at .agent-memory/{agent-name}/MEMORY.md`,
+Memory persists across conversations at ~/.deepagents/workspaces/<workspace>/memory/{agent-name}/MEMORY.md.
+Legacy .agent-memory/{agent-name}/MEMORY.md is read when the new path is empty.`,
     schema: z.object({
       operation: z.enum(["read", "write", "list"]).describe("Operation: read, write, or list"),
       key: z.string().optional().describe("Section key (## heading). For read: extract section. For write: update/append section."),

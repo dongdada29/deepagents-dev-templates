@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import {
   ClientSideConnection,
@@ -46,6 +49,7 @@ function startAcpServer(): ChildProcessWithoutNullStreams {
     env: {
       ...process.env,
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || "acp-smoke-dummy-key",
+      DEEPAGENTS_HOME: mkdtempSync(join(tmpdir(), "acp-smoke-deepagents-")),
       LOG_LEVEL: "error",
     },
     stdio: ["pipe", "pipe", "pipe"],
@@ -98,6 +102,34 @@ describe("ACP stdio server", () => {
       expect(smokeClient.updates.some((update) =>
         update.update.sessionUpdate === "available_commands_update"
       )).toBe(true);
+
+      const commandsUpdate = smokeClient.updates.find((update) =>
+        update.update.sessionUpdate === "available_commands_update"
+      );
+      const commandNames = commandsUpdate?.update.sessionUpdate === "available_commands_update"
+        ? commandsUpdate.update.availableCommands.map((command) => command.name)
+        : [];
+      expect(commandNames).toContain("help");
+      expect(commandNames).toContain("tools");
+      expect(commandNames).toContain("config");
+
+      smokeClient.updates = [];
+      const promptResult = await connection.prompt({
+        sessionId: session.sessionId,
+        prompt: [{ type: "text", text: "/config" }],
+      });
+
+      expect(promptResult.stopReason).toBe("end_turn");
+      const responseText = smokeClient.updates
+        .filter((update) => update.update.sessionUpdate === "agent_message_chunk")
+        .map((update) =>
+          update.update.sessionUpdate === "agent_message_chunk"
+            ? update.update.content.text
+            : ""
+        )
+        .join("");
+      expect(responseText).toContain("当前配置");
+      expect(responseText).toContain("my-scenario-agent");
     } catch (err) {
       throw new Error(`${err instanceof Error ? err.message : String(err)}\nACP stderr:\n${stderr}`);
     } finally {

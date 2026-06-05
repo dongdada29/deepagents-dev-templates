@@ -7,6 +7,7 @@
  */
 
 import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { resolve, join } from "node:path";
 import { type CreateDeepAgentParams, type FilesystemPermission, type AnyBackendProtocol, createMemoryMiddleware } from "deepagents";
 import type { StructuredTool } from "@langchain/core/tools";
@@ -22,7 +23,7 @@ import { createStuckLoopMiddleware } from "./middleware/stuck-loop.js";
 import { createPeriodicReminderMiddleware } from "./middleware/periodic-reminder.js";
 import { createCostTrackingMiddleware } from "./middleware/cost-tracking.js";
 import { createFsPathResolver } from "./middleware/fs-path-resolver.js";
-import { createHookMiddleware, getHooks } from "../app/hooks/index.js";
+import { createHookMiddleware, getHooks, registerConfiguredHooks } from "../app/hooks/index.js";
 
 // ─── Runtime Context ────────────────────────────────────
 
@@ -74,7 +75,11 @@ export function createRuntimeContext(
   }
 
   const mcpManager = new MCPManager({
+    defaultConfig: {
+      servers: config.mcp.servers as Record<string, { command?: string; args?: string[]; url?: string }>,
+    },
     defaultConfigPath: config.mcp.configPath,
+    defaultConfigPaths: config.mcp.configPaths,
     mergeStrategy: config.mcp.mergeStrategy,
   });
 
@@ -189,7 +194,7 @@ export function resolveModel(config: AppConfig): CreateDeepAgentParams["model"] 
 
 /**
  * Resolve system prompt with priority chain:
- *   ACP session prompt > prompts/developer-agent.system.md > inline fallback
+ *   ACP session prompt > config.agent.systemPrompt > config.agent.systemPromptPath > inline fallback
  */
 export function resolveSystemPrompt(
   config: AppConfig,
@@ -201,8 +206,12 @@ export function resolveSystemPrompt(
     return sessionConfig.systemPrompt;
   }
 
-  // Try loading from prompts/developer-agent.system.md
-  const promptPath = resolve(workspaceRoot, "prompts/developer-agent.system.md");
+  if (config.agent.systemPrompt) {
+    return withOutputStyle(config.agent.systemPrompt, config, workspaceRoot);
+  }
+
+  // Try loading from the configured prompt path.
+  const promptPath = resolvePromptPath(config.agent.systemPromptPath, workspaceRoot);
   let basePrompt: string;
   if (existsSync(promptPath)) {
     const content = readFileSync(promptPath, "utf-8");
@@ -233,8 +242,7 @@ export function resolveSystemPrompt(
   }
 
   // Append output style if configured
-  const style = resolveOutputStyle(config.agent.outputStyle, workspaceRoot);
-  return style ? `${basePrompt}\n\n${style}` : basePrompt;
+  return withOutputStyle(basePrompt, config, workspaceRoot);
 }
 
 /**
@@ -244,19 +252,27 @@ export function resolveSystemPrompt(
 export function resolveCliSystemPrompt(options: {
   systemPrompt?: string;
   promptPath?: string;
+  workspaceRoot?: string;
+  config?: AppConfig;
 }): string {
   if (options.systemPrompt) {
     return options.systemPrompt;
   }
 
+  const workspaceRoot = options.workspaceRoot || process.cwd();
   if (options.promptPath) {
-    const fullPath = resolve(process.cwd(), options.promptPath);
+    const fullPath = resolvePromptPath(options.promptPath, workspaceRoot);
     if (existsSync(fullPath)) {
       return readFileSync(fullPath, "utf-8").replace(/^# .*\r?\n/, "").trim();
     }
   }
 
-  const defaultPath = resolve(process.cwd(), "prompts/developer-agent.system.md");
+  if (options.config?.agent.systemPrompt) {
+    return options.config.agent.systemPrompt;
+  }
+
+  const configuredPath = options.config?.agent.systemPromptPath;
+  const defaultPath = resolvePromptPath(configuredPath || "prompts/developer-agent.system.md", workspaceRoot);
   if (existsSync(defaultPath)) {
     return readFileSync(defaultPath, "utf-8").replace(/^# .*\r?\n/, "").trim();
   }
@@ -280,13 +296,29 @@ export function resolveOutputStyle(styleName: string, workspaceRoot: string): st
   return content.replace(/^---\n[\s\S]*?\n---\n?/, "").trim();
 }
 
+function withOutputStyle(basePrompt: string, config: AppConfig, workspaceRoot: string): string {
+  const style = resolveOutputStyle(config.agent.outputStyle, workspaceRoot);
+  return style ? `${basePrompt}\n\n${style}` : basePrompt;
+}
+
+function resolvePromptPath(path: string, workspaceRoot: string): string {
+  if (path.startsWith("~/")) {
+    return resolve(process.env.HOME || "", path.slice(2));
+  }
+  return path.startsWith("/") ? path : resolve(workspaceRoot, path);
+}
+
 // ─── Memory Files ───────────────────────────────────────
 
 /**
  * Discover AGENTS.md and CLAUDE.md files in the workspace.
  * These are loaded by deepagents' memory system into the system prompt.
  */
-export function discoverMemoryFiles(workspaceRoot: string): string[] {
+export function discoverMemoryFiles(workspaceRoot: string, includeWorkspaceInstructions = true): string[] {
+  if (!includeWorkspaceInstructions) {
+    return [];
+  }
+
   const candidates = [
     "AGENTS.md",
     "CLAUDE.md",
@@ -313,18 +345,32 @@ export function discoverMemoryFiles(workspaceRoot: string): string[] {
  * 2. Skills from each configured agentsDirectory (via <dir>/skills/)
  */
 export function resolveSkillsPaths(config: AppConfig): string[] {
-  const normalize = (d: string) => d.startsWith("./") || d.startsWith("/") ? d : `./${d}`;
-
-  const paths = config.skills.directories.map(normalize);
+  const paths = config.skills.directories.map(normalizeResourcePath);
 
   // Append skills from .agents directories
   for (const agentsDir of config.agentsDirectories) {
-    const normalized = normalize(agentsDir);
+    const normalized = normalizeResourcePath(agentsDir);
     const skillsDir = `${normalized}/skills`;
     paths.push(skillsDir);
   }
 
-  return paths;
+  return Array.from(new Set(paths));
+}
+
+function normalizeResourcePath(path: string): string {
+  if (path === "~/.deepagents") {
+    return resolve(process.env.DEEPAGENTS_HOME || resolve(homedir(), ".deepagents"));
+  }
+  if (path.startsWith("~/.deepagents/")) {
+    return resolve(process.env.DEEPAGENTS_HOME || resolve(homedir(), ".deepagents"), path.slice("~/.deepagents/".length));
+  }
+  if (path.startsWith("~/")) {
+    return resolve(homedir(), path.slice(2));
+  }
+  if (path.startsWith("/") || path.startsWith("./")) {
+    return path;
+  }
+  return `./${path}`;
 }
 
 // ─── Subagent Discovery ─────────────────────────────────
@@ -414,7 +460,7 @@ export function discoverSubAgents(config: AppConfig, workspaceRoot?: string): Di
   const root = workspaceRoot || process.cwd();
 
   for (const agentsDir of config.agentsDirectories) {
-    const normalized = agentsDir.startsWith("./") || agentsDir.startsWith("/") ? agentsDir : `./${agentsDir}`;
+    const normalized = normalizeResourcePath(agentsDir);
     const agentsPath = resolve(root, normalized, "agents");
 
     if (!existsSync(agentsPath)) {
@@ -528,10 +574,11 @@ export function buildAgentConfigParts(
   // Build custom middleware array from config
   const middleware: AgentMiddleware[] = [];
   const mwConfig = config.middleware;
+  registerConfiguredHooks(config.hooks, workspaceRoot);
 
   // Memory middleware — explicitly created with addCacheControl for Anthropic prompt caching.
   // Falls back to the `memory` shortcut parameter when no backend is provided.
-  const memoryPaths = discoverMemoryFiles(workspaceRoot);
+  const memoryPaths = discoverMemoryFiles(workspaceRoot, config.agent.includeWorkspaceInstructions);
   if (backend && memoryPaths.length > 0) {
     middleware.push(createMemoryMiddleware({
       backend,

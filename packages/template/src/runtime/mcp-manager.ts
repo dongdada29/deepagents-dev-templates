@@ -41,10 +41,23 @@ export class MCPManager {
   private mergedConfigCache: MCPConfig | null = null;
 
   constructor(options?: {
+    defaultConfig?: MCPConfig;
     defaultConfigPath?: string;
+    defaultConfigPaths?: string[];
     mergeStrategy?: MergeStrategy;
   }) {
     this.mergeStrategy = options?.mergeStrategy ?? "session-wins";
+    if (options?.defaultConfig) {
+      this.defaultConfig = {
+        servers: {
+          ...this.defaultConfig.servers,
+          ...options.defaultConfig.servers,
+        },
+      };
+    }
+    for (const configPath of options?.defaultConfigPaths ?? []) {
+      this.loadDefaultConfig(configPath);
+    }
     if (options?.defaultConfigPath) {
       this.loadDefaultConfig(options.defaultConfigPath);
     }
@@ -61,7 +74,12 @@ export class MCPManager {
     try {
       const content = readFileSync(resolved, "utf-8");
       const parsed = JSON.parse(content) as MCPConfig;
-      this.defaultConfig = parsed;
+      this.defaultConfig = {
+        servers: {
+          ...this.defaultConfig.servers,
+          ...parsed.servers,
+        },
+      };
       this.log.info("Loaded default MCP config", {
         servers: Object.keys(parsed.servers),
       });

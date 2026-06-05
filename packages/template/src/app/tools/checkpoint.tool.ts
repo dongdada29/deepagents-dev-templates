@@ -16,12 +16,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from "node:fs";
 import { resolve, basename } from "node:path";
-
-const CHECKPOINT_DIR = ".agent-checkpoints";
-
-function getCheckpointDir(): string {
-  return resolve(process.cwd(), CHECKPOINT_DIR);
-}
+import { ensureSessionState, getRuntimeStorage, legacyCheckpointsDir } from "../../runtime/runtime-storage.js";
 
 /** Sanitize checkpoint ID to prevent path traversal */
 function sanitizeId(id: string): string {
@@ -38,11 +33,13 @@ function generateCheckpointId(): string {
 
 export const checkpointTool = tool(
   async ({ operation, checkpointId, description, maxResults }) => {
-    const dir = getCheckpointDir();
+    const storage = getRuntimeStorage();
+    const dir = storage.checkpointsDir;
 
     try {
       switch (operation) {
         case "save": {
+          ensureSessionState(storage);
           mkdirSync(dir, { recursive: true });
           const id = generateCheckpointId();
           const checkpointPath = resolve(dir, `${id}.md`);
@@ -69,21 +66,26 @@ export const checkpointTool = tool(
         }
 
         case "list": {
-          if (!existsSync(dir)) {
-            return "No checkpoints found. Use `save` to create one.";
-          }
-          const files = readdirSync(dir)
-            .filter(f => f.startsWith("cp-") && f.endsWith(".md"))
+          const legacyDir = legacyCheckpointsDir(storage.workspaceRoot);
+          const activeFiles = existsSync(dir)
+            ? readdirSync(dir).filter(f => f.startsWith("cp-") && f.endsWith(".md"))
+            : [];
+          const legacyFiles = existsSync(legacyDir)
+            ? readdirSync(legacyDir).filter(f => f.startsWith("cp-") && f.endsWith(".md"))
+            : [];
+          const files = [...new Set([...activeFiles, ...legacyFiles])]
             .sort()
             .reverse()
             .slice(0, maxResults ?? 10);
 
           if (files.length === 0) {
-            return "No checkpoints found.";
+            return "No checkpoints found. Use `save` to create one.";
           }
 
           const listings = files.map(f => {
-            const content = readFileSync(resolve(dir, f), "utf-8");
+            const activePath = resolve(dir, f);
+            const checkpointPath = existsSync(activePath) ? activePath : resolve(legacyDir, f);
+            const content = readFileSync(checkpointPath, "utf-8");
             const descMatch = content.match(/^Description: (.+)$/m);
             const timeMatch = content.match(/^Created: (.+)$/m);
             const id = f.replace(".md", "");
@@ -97,16 +99,18 @@ export const checkpointTool = tool(
           if (!checkpointId) return "Error: checkpointId is required for rewind operation";
           const safeId = sanitizeId(checkpointId);
           const checkpointPath = resolve(dir, `${safeId}.md`);
-          if (!existsSync(checkpointPath)) {
+          const legacyPath = resolve(legacyCheckpointsDir(storage.workspaceRoot), `${safeId}.md`);
+          const readablePath = existsSync(checkpointPath) ? checkpointPath : legacyPath;
+          if (!existsSync(readablePath)) {
             const available = existsSync(dir)
               ? readdirSync(dir).filter(f => f.startsWith("cp-")).map(f => f.replace(".md", ""))
               : [];
             return `Checkpoint "${safeId}" not found. Available: ${available.join(", ") || "none"}`;
           }
 
-          const content = readFileSync(checkpointPath, "utf-8");
+          const content = readFileSync(readablePath, "utf-8");
           return [
-            `⏪ REWINDING TO CHECKPOINT: ${safeId}`,
+            `REWINDING TO CHECKPOINT: ${safeId}`,
             "",
             content,
             "",
@@ -121,9 +125,8 @@ export const checkpointTool = tool(
           const safeId = sanitizeId(checkpointId);
           const deletePath = resolve(dir, `${safeId}.md`);
           if (!existsSync(deletePath)) {
-            return `Checkpoint "${safeId}" not found.`;
+            return `Checkpoint "${safeId}" not found in active session storage. Legacy checkpoints are read-only; run /migrate-state first.`;
           }
-          unlinkSync(deletePath);
           unlinkSync(deletePath);
           return `Checkpoint "${checkpointId}" deleted.`;
         }
@@ -143,7 +146,10 @@ Operations:
 - save: Save a checkpoint of the current conversation state
 - list: List all saved checkpoints
 - rewind: Rewind to a specific checkpoint (restores context)
-- delete: Delete a checkpoint`,
+- delete: Delete a checkpoint
+
+Checkpoints are stored under ~/.deepagents/workspaces/<workspace>/sessions/<session>/checkpoints/.
+Legacy .agent-checkpoints/ files are readable until migrated.`,
     schema: z.object({
       operation: z.enum(["save", "list", "rewind", "delete"]).describe("Operation type"),
       checkpointId: z.string().optional().describe("Checkpoint ID (required for rewind/delete)"),

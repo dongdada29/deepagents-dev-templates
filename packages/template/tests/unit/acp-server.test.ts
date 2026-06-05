@@ -1,10 +1,10 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../../src/runtime/config-loader.js";
 import { buildACPAgentConfig, loadSessionConfigFromEnv } from "../../src/runtime/acp-server.js";
-import { createRuntimeContextAsync } from "../../src/runtime/helpers.js";
+import { createRuntimeContextAsync, discoverMemoryFiles, resolveSkillsPaths, resolveSystemPrompt } from "../../src/runtime/helpers.js";
 
 function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -15,10 +15,17 @@ function jsonResponse(body: unknown): Response {
 
 describe("ACP server config", () => {
   const originalEnv = { ...process.env };
+  let envHome: string;
+
+  beforeEach(() => {
+    envHome = mkdtempSync(join(tmpdir(), "acp-config-home-"));
+    process.env.DEEPAGENTS_HOME = envHome;
+  });
 
   afterEach(() => {
     process.env = { ...originalEnv };
     vi.unstubAllGlobals();
+    rmSync(envHome, { recursive: true, force: true });
   });
 
   it("uses session prompt and model when building the ACP agent config", () => {
@@ -60,6 +67,43 @@ describe("ACP server config", () => {
       agentId: "agent-env",
       spaceId: "space-env",
     });
+  });
+
+  it("resolves configured system prompt and lets ACP session prompt win", () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "prompt-config-test-"));
+    try {
+      const config = loadConfig({
+        configPath: "/nonexistent.json",
+        workspaceRoot,
+      });
+      config.agent.systemPrompt = "Configured prompt";
+
+      expect(resolveSystemPrompt(config, undefined, workspaceRoot)).toContain("Configured prompt");
+      expect(resolveSystemPrompt(config, { systemPrompt: "ACP prompt" }, workspaceRoot)).toBe("ACP prompt");
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("discovers root AGENTS.md and can disable workspace instructions", () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "agents-md-test-"));
+    try {
+      const agentsPath = join(workspaceRoot, "AGENTS.md");
+      writeFileSync(agentsPath, "# Instructions", "utf-8");
+      expect(discoverMemoryFiles(workspaceRoot)).toContain("./AGENTS.md");
+      expect(discoverMemoryFiles(workspaceRoot, false)).toEqual([]);
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves user and project skill paths without treating ~ as relative", () => {
+    const config = loadConfig({ configPath: "/nonexistent.json" });
+    const skills = resolveSkillsPaths(config);
+
+    expect(skills.some((path) => path.endsWith("/.deepagents/skills"))).toBe(true);
+    expect(skills).toContain("./.deepagents/skills");
+    expect(skills).not.toContain("./~/.deepagents/skills");
   });
 
   it("hydrates platform MCP components and lets session MCP override them", async () => {
