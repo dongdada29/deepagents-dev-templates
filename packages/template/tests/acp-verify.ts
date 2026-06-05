@@ -286,17 +286,15 @@ async function run() {
     record("第二次: 文件未创建", !secondExists, `file exists: ${secondExists}`);
 
     // ─── TC-06: 文件编辑工具 ───
+    // Note: edit_file requires write permission, so we test in yolo mode
     console.log("\n── TC-06: 文件编辑工具 ──");
-    // Use workspace-relative path that matches how Agent resolves paths
     const editTestPath = resolve(TEMPLATE_DIR, "acp-edit-test.txt");
     writeFileSync(editTestPath, "original content\nline 2\nline 3", "utf-8");
     console.log(`  ${INFO} 发送: "把 acp-edit-test.txt 的第一行改为 edited content"`);
     client.updates = [];
-    client.permissions = [];
-    client.autoApprove = true;
     await connection.prompt({
       sessionId: session.sessionId,
-      prompt: [{ type: "text", text: '把 acp-edit-test.txt 的第一行改为 "edited content"。直接调用工具，不要问问题。' }],
+      prompt: [{ type: "text", text: '使用 edit_file 工具把 acp-edit-test.txt 的第一行改为 "edited content"。old_string 是 "original content"，new_string 是 "edited content"。直接调用工具，不要问问题。' }],
     });
 
     const editedContent = existsSync(editTestPath) ? readFileSync(editTestPath, "utf-8") : "";
