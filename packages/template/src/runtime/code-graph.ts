@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve, relative, join } from "node:path";
+import { parse as parseYaml } from "yaml";
 
 export type CodeGraphNodeKind =
   | "entrypoint"
@@ -135,9 +136,12 @@ function listSubAgentNodes(root: string): CodeGraphNode[] {
       let label = entry;
       try {
         const content = readFileSync(agentMdPath, "utf-8");
-        const nameMatch = content.match(/^---\r?\n[\s\S]*?name:\s*(.+)\r?\n[\s\S]*?---/);
-        if (nameMatch) {
-          label = nameMatch[1]!.trim().replace(/^["']|["']$/g, "");
+        const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+        if (fmMatch) {
+          const parsed = parseYaml(fmMatch[1]) as Record<string, unknown> | null;
+          if (parsed && typeof parsed === "object" && typeof parsed.name === "string") {
+            label = parsed.name;
+          }
         }
       } catch {
         // Use directory name as fallback

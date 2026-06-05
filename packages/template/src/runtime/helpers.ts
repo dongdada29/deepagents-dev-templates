@@ -9,6 +9,7 @@
 import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { resolve, join } from "node:path";
+import { parse as parseYaml } from "yaml";
 import { type CreateDeepAgentParams, type FilesystemPermission, type AnyBackendProtocol, createMemoryMiddleware } from "deepagents";
 import type { StructuredTool } from "@langchain/core/tools";
 import type { AgentMiddleware } from "langchain";
@@ -436,48 +437,17 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, string
     return { frontmatter: {}, body: content };
   }
 
-  const frontmatter: Record<string, string> = {};
-  let currentKey: string | null = null;
-
-  for (const rawLine of match[1]!.split("\n")) {
-    const line = rawLine.replace(/\r$/, "");
-
-    // Multi-line continuation: indented line appends to previous key
-    if (currentKey && (line.startsWith("  ") || line.startsWith("\t"))) {
-      frontmatter[currentKey] += ` ${line.trim()}`;
-      continue;
-    }
-
-    const colonIdx = line.indexOf(":");
-    if (colonIdx === -1) {
-      currentKey = null;
-      continue;
-    }
-
-    const key = line.slice(0, colonIdx).trim();
-    if (!key) {
-      currentKey = null;
-      continue;
-    }
-
-    let value = line.slice(colonIdx + 1).trim();
-    // Strip surrounding quotes (quoted values preserve # literally)
-    const isQuoted = (value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"));
-    if (isQuoted) {
-      value = value.slice(1, -1);
-    } else {
-      // Strip inline YAML comments only for unquoted values.
-      // YAML spec: comment starts with # preceded by a space.
-      // Avoid stripping '#' that's part of the value (e.g. "C# toolkit", "item #1").
-      // Match " #comment" or " # comment" but NOT " C#" or " #1".
-      const commentMatch = value.match(/ #(?=$| )/);
-      if (commentMatch && commentMatch.index !== undefined && commentMatch.index > 0) {
-        value = value.slice(0, commentMatch.index).trim();
+  let frontmatter: Record<string, string> = {};
+  try {
+    const parsed = parseYaml(match[1]) as Record<string, unknown> | null;
+    if (parsed && typeof parsed === "object") {
+      frontmatter = {};
+      for (const [key, value] of Object.entries(parsed)) {
+        frontmatter[key] = typeof value === "string" ? value : String(value ?? "");
       }
     }
-
-    frontmatter[key] = value;
-    currentKey = key;
+  } catch {
+    // YAML parse error — return empty frontmatter, keep body intact
   }
 
   return { frontmatter, body: match[2]!.trim() };

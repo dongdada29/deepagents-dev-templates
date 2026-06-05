@@ -40,7 +40,7 @@ async function callStdioMcpMethod(
     throw new Error(`MCP server "${server}" is not a stdio server; only command-based MCP servers are supported in this template runtime`);
   }
 
-  const timeoutMs = Number(process.env.MCP_TOOL_TIMEOUT_MS ?? 30_000);
+  const timeoutMs = Number(process.env.MCP_TOOL_TIMEOUT_MS) || 30_000;
   const child = spawn(config.command, config.args ?? [], {
     env: resolveServerEnv(config),
     stdio: ["pipe", "pipe", "pipe"],
@@ -74,7 +74,10 @@ async function callStdioMcpMethod(
   });
 
   child.stderr.on("data", (chunk: Buffer) => {
-    stderr.push(chunk.toString("utf-8"));
+    // Cap stderr at ~64KB to prevent unbounded accumulation
+    if (stderr.length < 128) {
+      stderr.push(chunk.toString("utf-8"));
+    }
   });
 
   // If the child exits unexpectedly, reject all pending promises immediately
@@ -118,7 +121,11 @@ async function callStdioMcpMethod(
         version: "0.1.0",
       },
     });
-    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
+    child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`, (err) => {
+      if (err && process.env.LOG_LEVEL === "debug") {
+        console.error("Failed to write MCP initialized notification:", err.message);
+      }
+    });
 
     return await send(method, params);
   } finally {

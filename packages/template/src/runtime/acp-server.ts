@@ -234,6 +234,7 @@ function patchSessionLifecycle(
     activeMcpManager = sessionMcpManager;
     activeWorkspaceRoot = requestedWorkspaceRoot;
     s.workspaceRoot = requestedWorkspaceRoot;
+    agentConfig.interruptOn = {};
     s.agentConfigs?.set(agentConfig.name, agentConfig);
     s.agents?.delete(agentConfig.name);
     s.acpBackends?.delete(agentConfig.name);
@@ -424,6 +425,7 @@ function patchSessionLifecycle(
   s.handleCloseSession = async (...args: unknown[]) => {
     const params = args[0] as { sessionId: string };
     const info = manager.close(params.sessionId);
+    s.sessions?.delete(params.sessionId);
     sessionMcpServers.delete(params.sessionId);
     sessionWorkspaces.delete(params.sessionId);
     if (!info) {
@@ -687,6 +689,9 @@ export async function buildACPAgentConfigAsync(
     ...buildAgentConfigParts(config, sessionConfig, workspaceRoot, runtimeCtx.tools),
     // Do NOT set backend — DeepAgentsServer creates ACPFilesystemBackend automatically,
     // which provides IDE integration (unsaved buffer reads via ACP client).
+    // Disable HITL interruptOn in ACP mode - deepagents-acp does not handle
+    // LangGraph interrupts from humanInTheLoopMiddleware, causing tool calls to hang.
+    interruptOn: {},
 	  } as unknown as DeepAgentConfig;
 
   log.info("Agent config built", {
@@ -715,6 +720,9 @@ export async function buildACPAgentConfigWithMcpAsync(
     description: config.agent.description,
     commands: getAcpSlashCommandSpecs(),
     ...buildAgentConfigParts(config, sessionConfig, workspaceRoot, runtimeCtx.tools),
+    // Disable HITL interruptOn in ACP mode - deepagents-acp does not handle
+    // LangGraph interrupts from humanInTheLoopMiddleware, causing tool calls to hang.
+    interruptOn: {},
 	  } as unknown as DeepAgentConfig;
 
   log.info("Agent config built", {

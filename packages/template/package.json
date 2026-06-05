@@ -47,6 +47,7 @@
     "deepagents": "^1.10.2",
     "deepagents-acp": "latest",
     "dotenv": "^16.4.0",
+    "yaml": "^2.9.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
