@@ -37,3 +37,5 @@ This is a template project for building AI Agents using deepagents (JS/TS) that 
 - `npm run dev` — development mode with tsx
 - `npm start` — production mode from dist/
 - `npm run start:acp` — start ACP server explicitly
+- `npm run inspect` — inspect the agent orchestration spec (dry-run)
+- `npm run inspect -- --full` — full inspection with LangGraph runtime topology (requires model credentials)

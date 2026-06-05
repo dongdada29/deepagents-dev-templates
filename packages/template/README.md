@@ -95,3 +95,5 @@ See [docs/zed-acp-setup.md](./docs/zed-acp-setup.md) for the Zed `agent_servers`
 | `npm run lint` | Lint source code |
 | `npm run typecheck` | Type check without emit |
 | `npm run graph` | Print the code node relationship graph JSON |
+| `npm run inspect` | Inspect the agent orchestration spec (dry-run) |
+| `npm run inspect -- --full` | Full inspection with LangGraph runtime topology |

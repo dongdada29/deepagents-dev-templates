@@ -36,7 +36,8 @@
     "lint": "echo \"No linter configured; use npm run typecheck\" && tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist/",
-    "package": "bash scripts/package.sh"
+    "package": "bash scripts/package.sh",
+    "inspect": "npm run inspect -w inspector --"
   },
   "dependencies": {
     "@langchain/anthropic": "^1.4.0",

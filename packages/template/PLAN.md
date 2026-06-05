@@ -147,6 +147,7 @@ agent-package.json              # Distribution manifest
 - ✅ Eviction middleware (auto-evict large tool outputs to backend)
 - ✅ ACP integration tests (TC-01~TC-06, TC-12~TC-16) with real LLM
 - ✅ Install script (`scripts/install.sh`) for tgz/npm/git distribution
+- ✅ Inspector package (`packages/inspector/`) — read-only orchestration visualizer with dry-run + full mode
 - ⬜ Full nuwaclaw UI ACP prompt/debug integration test (blocked: needs nuwaclaw team)
 - ⬜ Nuwax API production endpoint validation (blocked: needs platform credentials)
 

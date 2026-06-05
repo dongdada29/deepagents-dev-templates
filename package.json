@@ -10,7 +10,8 @@
     "test": "npm test -w packages/template",
     "dev": "npm run dev -w packages/template",
     "typecheck": "npm run typecheck -w packages/template",
-    "graph": "npm run graph -w packages/template"
+    "graph": "npm run graph -w packages/template",
+    "inspect": "npm run inspect -w packages/inspector"
   },
   "description": "DeepAgents development templates — monorepo for agent template and dev-agent config",
   "license": "MIT"
