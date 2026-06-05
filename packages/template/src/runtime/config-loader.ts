@@ -120,7 +120,7 @@ export const AppConfigSchema = z.object({
   agent: z.object({
     name: z.string().default("deepagents-app-agent"),
     description: z.string().default("AI application agent"),
-    version: z.string().default("0.1.0"),
+    version: z.string().default("0.1.1"),
     outputStyle: z.string().default("concise"),
     systemPrompt: z.string().optional(),
     systemPromptPath: z.string().default("prompts/developer-agent.system.md"),
