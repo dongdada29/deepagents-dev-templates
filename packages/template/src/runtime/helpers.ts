@@ -23,6 +23,8 @@ import { createStuckLoopMiddleware } from "./middleware/stuck-loop.js";
 import { createPeriodicReminderMiddleware } from "./middleware/periodic-reminder.js";
 import { createCostTrackingMiddleware } from "./middleware/cost-tracking.js";
 import { createFsPathResolver } from "./middleware/fs-path-resolver.js";
+import { createCompactionMiddleware } from "./middleware/compaction.js";
+import { createEvictionMiddleware } from "./middleware/eviction.js";
 import { createHookMiddleware, getHooks, registerConfiguredHooks } from "../app/hooks/index.js";
 
 // ─── Runtime Context ────────────────────────────────────
@@ -607,6 +609,22 @@ export function buildAgentConfigParts(
   if (mwConfig.costTracking.enabled) {
     middleware.push(createCostTrackingMiddleware({
       warnAtTokens: mwConfig.costTracking.warnAtTokens,
+    }));
+  }
+
+  // Context compaction — compress old messages when approaching context limit
+  if (config.compaction.enabled) {
+    middleware.push(createCompactionMiddleware({
+      config: config.compaction,
+      modelName: config.model.name,
+    }));
+  }
+
+  // Large output eviction — write oversized tool results to backend
+  if (config.eviction.enabled && backend) {
+    middleware.push(createEvictionMiddleware({
+      config: config.eviction,
+      backend,
     }));
   }
 

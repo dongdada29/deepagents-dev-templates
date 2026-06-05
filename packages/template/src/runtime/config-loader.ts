@@ -116,6 +116,32 @@ export const LoggingConfigSchema = z.object({
   structured: z.boolean().default(true),
 });
 
+export const CompactionConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  /** Context window size in tokens. Default: 200000 (Claude 3.5 Sonnet) */
+  contextWindow: z.number().min(1000).default(200_000),
+  /** Trigger compaction when context exceeds this ratio of contextWindow. Default: 0.8 */
+  triggerThreshold: z.number().min(0.1).max(0.95).default(0.8),
+  /** Tokens reserved for summary generation. Default: 16384 */
+  reserveTokens: z.number().min(1000).default(16_384),
+  /** Approximate recent context tokens to keep uncompressed. Default: 20000 */
+  keepRecentTokens: z.number().min(1000).default(20_000),
+});
+
+export const EvictionConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  /** Token threshold before evicting tool output. Default: 20000 */
+  tokenLimit: z.number().min(1000).default(20_000),
+  /** Characters per token for estimation. Default: 4 */
+  charPerToken: z.number().min(1).default(4),
+  /** Lines to show from start in preview. Default: 5 */
+  headLines: z.number().min(1).default(5),
+  /** Lines to show from end in preview. Default: 5 */
+  tailLines: z.number().min(1).default(5),
+  /** Backend path for evicted files. Default: "/large_tool_results" */
+  evictionPath: z.string().default("/large_tool_results"),
+});
+
 export const AppConfigSchema = z.object({
   agent: z.object({
     name: z.string().default("deepagents-app-agent"),
@@ -148,6 +174,8 @@ export const AppConfigSchema = z.object({
   plugins: PluginsConfigSchema.default({}),
   workspace: WorkspaceConfigSchema.default({}),
   logging: LoggingConfigSchema.default({}),
+  compaction: CompactionConfigSchema.default({}),
+  eviction: EvictionConfigSchema.default({}),
   middleware: z.object({
     stuckLoopDetection: z.object({
       enabled: z.boolean().default(true),
