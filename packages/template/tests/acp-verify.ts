@@ -101,12 +101,14 @@ class VerifyClient implements Client {
 
 function startServer(): ChildProcessWithoutNullStreams {
   const templateDir = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
-  return spawn("node", ["--import", "tsx", "src/index.ts"], {
+  return spawn("node", ["--import", "tsx", "src/index.ts", "--config", "./config/app-agent.config.json"], {
     cwd: templateDir,
     env: {
       ...process.env,
       ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || "acp-verify-dummy-key",
       LOG_LEVEL: "debug",
+      // Override permissions mode for testing HITL
+      DEEPAGENTS_PERMISSIONS_MODE: "ask",
     },
     stdio: ["pipe", "pipe", "pipe"],
   });

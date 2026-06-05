@@ -221,6 +221,7 @@ const ENV_MAP: Record<string, string> = {
   MAX_TOKENS: "model.settings.maxTokens",
   MCP_CONFIG_PATH: "mcp.configPath",
   LOG_LEVEL: "logging.level",
+  DEEPAGENTS_PERMISSIONS_MODE: "permissions.mode",
 };
 
 // ─── Helper Functions ───────────────────────────────────
