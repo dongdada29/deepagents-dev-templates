@@ -649,23 +649,38 @@ export function resolveSandboxPolicy(config: AppConfig): SandboxPolicy {
  * deny rule. Without this resolution, the deny glob never matches the actual
  * file path the agent passes and the deny is silently ignored.
  */
+/**
+ * Convert a single denied-write path (workspace-relative or absolute) into
+ * the absolute glob that `decidePathAccess` / our protected-paths middleware
+ * match against the OS-absolute `file_path` the tool receives.
+ *
+ * Examples (with workspaceRoot = "/Users/dev/project"):
+ *   "src/runtime/"     → "/Users/dev/project/src/runtime/**"
+ *   "src/runtime"      → "/Users/dev/project/src/runtime/**"
+ *   "/abs/dir/"        → "/abs/dir/**"
+ *   "/"                → "/**"
+ *
+ * `join()` is used (not `resolve()`) so the trailing slash on a directory is
+ * preserved — `/abs/dir/**` (correct) vs `/abs/dir**` (would also match
+ * `/abs/dirfoo/x.ts`).
+ */
+function toAbsoluteDenyGlob(denied: string, workspaceRoot: string): string {
+  const withSlash = denied.endsWith("/") ? denied : `${denied}/`;
+  const absoluteBase = withSlash.startsWith("/")
+    ? withSlash
+    : join(workspaceRoot, withSlash);        // join preserves trailing `/`
+  return absoluteBase.startsWith("/") ? `${absoluteBase}**` : `/${absoluteBase}**`;
+}
+
 export function buildPermissions(config: AppConfig, workspaceRoot?: string): FilesystemPermission[] {
   const permissions: FilesystemPermission[] = [];
   const sandbox = resolveSandboxPolicy(config);
+  const root = workspaceRoot ?? "/";
 
   for (const denied of sandbox.deniedWritePaths) {
-    // Build the absolute path WITHOUT `resolve` eating the trailing slash.
-    // We need `/abs/dir/**` (not `/abs/dir**`) to avoid matching siblings like
-    // `/abs/dirfoo/x`. So: take the absolute base, ensure it ends in `/`, then
-    // append `**`.
-    const absoluteBase = workspaceRoot && !denied.startsWith("/")
-      ? join(workspaceRoot, denied)        // join preserves the original trailing slash
-      : denied;
-    const withSlash = absoluteBase.endsWith("/") ? absoluteBase : `${absoluteBase}/`;
-    const globPath = withSlash.startsWith("/") ? `${withSlash}**` : `/${withSlash}**`;
     permissions.push({
       operations: ["write"],
-      paths: [globPath],
+      paths: [toAbsoluteDenyGlob(denied, root)],
       mode: "deny" as const,
     });
   }
@@ -779,6 +794,7 @@ export function buildAgentConfigParts(
 
   // ── Mode-based overrides ─────────────────────────────────
   const mode = config.permissions.mode;
+  const sandbox = resolveSandboxPolicy(config);
   let interruptOn: Record<string, boolean>;
   let permissions: FilesystemPermission[];
   let systemPrompt = withRuntimeContextPrompt(
@@ -786,32 +802,26 @@ export function buildAgentConfigParts(
     workspaceRoot
   );
 
+  // Protected paths middleware is orthogonal to HITL mode. We always enforce
+  // the sandbox's `deniedWritePaths` (when non-empty) by wrapping the tool
+  // call before it reaches the filesystem — because `DeepAgentsServer` in
+  // ACP mode drops the `permissions` field from `createDeepAgent`, so the
+  // `permissions` array alone cannot protect files. This used to live only
+  // in the `else` (non-yolo) branch, which left yolo+workspace-write /
+  // yolo+read-only silently unprotected (regression surfaced by the
+  // branch-merge review). Now it runs in every mode.
+  if (sandbox.deniedWritePaths.length > 0) {
+    const deniedGlobs = sandbox.deniedWritePaths.map((d) => toAbsoluteDenyGlob(d, workspaceRoot));
+    middleware.push(createProtectedPathsMiddleware({ deniedGlobs }));
+  }
+
   if (mode === "yolo") {
     // No HITL. Sandbox profiles can still enforce path restrictions unless explicitly open.
     interruptOn = {};
-    permissions = resolveSandboxPolicy(config).profile === "open"
+    permissions = sandbox.profile === "open"
       ? [{ operations: ["read", "write"], paths: ["/**"], mode: "allow" as const }]
       : buildPermissions(config, workspaceRoot);
-  } else {
-    // plan OR ask: protected paths are enforced. deepagents-acp's
-    // DeepAgentsServer drops `permissions` when calling `createDeepAgent`, so
-    // we mirror the deny rules with our own middleware that wraps the tool
-    // call before it reaches the filesystem. Skipped in yolo since there are
-    // no deny rules to enforce there.
-    const sandbox = resolveSandboxPolicy(config);
-    if (sandbox.deniedWritePaths.length > 0) {
-      const deniedGlobs = sandbox.deniedWritePaths.map((denied) => {
-        const base = denied.endsWith("/") ? denied : `${denied}/`;
-        const absolute = base.startsWith("/")
-          ? base
-          : join(workspaceRoot, base);            // join preserves trailing `/`
-        return absolute.startsWith("/") ? `${absolute}**` : `/${absolute}**`;
-      });
-      middleware.push(createProtectedPathsMiddleware({ deniedGlobs }));
-    }
-  }
-
-  if (mode === "plan") {
+  } else if (mode === "plan") {
     // HITL on writes + planning preamble
     interruptOn = buildInterruptOn(config.permissions.interruptOn);
     permissions = buildPermissions(config, workspaceRoot);
