@@ -32,6 +32,7 @@ export interface RuntimeStorage {
   artifactsDir: string;
   memoryDir: string;
   metadataPath: string;
+  lifecyclePath: string;
 }
 
 export interface SessionSummary {
@@ -108,6 +109,7 @@ export function getRuntimeStorage(options: RuntimeStorageContext = {}): RuntimeS
     artifactsDir: join(sessionDir, "artifacts"),
     memoryDir: join(workspaceDir, "memory"),
     metadataPath: join(sessionDir, "metadata.json"),
+    lifecyclePath: join(sessionDir, "harness-lifecycle.json"),
   };
 }
 

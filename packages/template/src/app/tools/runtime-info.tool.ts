@@ -9,6 +9,7 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { getRuntimeStorage } from "../../runtime/runtime-storage.js";
+import { readHarnessLifecycle } from "../../runtime/harness-lifecycle.js";
 
 export interface RuntimeInfoToolOptions {
   workspaceRoot: string;
@@ -16,7 +17,7 @@ export interface RuntimeInfoToolOptions {
 
 export function createRuntimeInfoTool(options: RuntimeInfoToolOptions) {
   return tool(
-    async ({ includeStorage }) => {
+    async ({ includeStorage, includeLifecycle }) => {
       const storage = getRuntimeStorage({ workspaceRoot: options.workspaceRoot });
       return JSON.stringify({
         workspaceRoot: storage.workspaceRoot,
@@ -29,7 +30,13 @@ export function createRuntimeInfoTool(options: RuntimeInfoToolOptions) {
                 workspaceDir: storage.workspaceDir,
                 sessionDir: storage.sessionDir,
                 messagesPath: storage.messagesPath,
+                lifecyclePath: storage.lifecyclePath,
               },
+            }
+          : {}),
+        ...(includeLifecycle
+          ? {
+              lifecycle: readHarnessLifecycle(storage),
             }
           : {}),
       });
@@ -44,6 +51,11 @@ export function createRuntimeInfoTool(options: RuntimeInfoToolOptions) {
           .optional()
           .default(false)
           .describe("Whether to include DeepAgents storage paths in the response"),
+        includeLifecycle: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("Whether to include the harness lifecycle snapshot for the current session"),
       }),
     }
   );

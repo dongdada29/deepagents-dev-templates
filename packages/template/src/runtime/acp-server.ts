@@ -27,6 +27,12 @@ import {
   type DeepAgentsServerInternals,
 } from "./acp-server-internals.js";
 import {
+  beginHarnessTurn,
+  completeHarnessTurn,
+  failHarnessTurn,
+  readHarnessLifecycle,
+} from "./harness-lifecycle.js";
+import {
   createRuntimeContext,
   createRuntimeContextAsync,
   buildAgentConfigParts,
@@ -334,6 +340,7 @@ function patchSessionLifecycle(
         workspaceRoot: activeWorkspaceRoot,
       };
       const storage = getRuntimeStorage({ workspaceRoot: sessionWorkspace.workspaceRoot, sessionId: params.sessionId });
+      beginHarnessTurn(promptText ?? undefined, storage);
       if (promptText) {
         appendRuntimeMessage({ role: "user", content: promptText }, storage);
       }
@@ -350,6 +357,7 @@ function patchSessionLifecycle(
 
       if (slashResult) {
         manager.touch(params.sessionId);
+        completeHarnessTurn(storage);
         return slashResult;
       }
 
@@ -360,8 +368,10 @@ function patchSessionLifecycle(
         );
         // Only count successful prompts
         manager.touch(params.sessionId);
+        completeHarnessTurn(storage);
         return result;
       } catch (err) {
+        failHarnessTurn(err, storage);
         if (err instanceof Error && err.message.includes("Session not found")) {
           // Clean up the dead session
           manager.close(params.sessionId);
@@ -429,6 +439,10 @@ function patchSessionLifecycle(
       mode: info.mode,
       agent: sessionWorkspace.config.agent.name,
       environment: "acp",
+      lifecycle: readHarnessLifecycle(getRuntimeStorage({
+        workspaceRoot: sessionWorkspace.workspaceRoot,
+        sessionId: params.sessionId,
+      })),
     });
     return {
       closed: true,

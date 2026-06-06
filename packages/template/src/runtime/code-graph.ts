@@ -179,6 +179,7 @@ export function generateCodeGraph(root = process.cwd()): CodeGraph {
     ["runtime:platform-client", "Platform client", "src/runtime/platform-client.ts"],
     ["runtime:mcp-manager", "MCP manager", "src/runtime/mcp-manager.ts"],
     ["runtime:variables", "Variable manager", "src/runtime/variable-manager.ts"],
+    ["runtime:harness-lifecycle", "Harness lifecycle", "src/runtime/harness-lifecycle.ts"],
     ["runtime:code-graph", "Code graph generator", "src/runtime/code-graph.ts"],
   ] as const) {
     addIfExists(nodes, root, {
@@ -268,6 +269,7 @@ export function generateCodeGraph(root = process.cwd()): CodeGraph {
     { from: "runtime:helpers", to: "runtime:platform-client", kind: "configures" },
     { from: "runtime:helpers", to: "runtime:mcp-manager", kind: "configures" },
     { from: "runtime:helpers", to: "runtime:variables", kind: "configures" },
+    { from: "runtime:helpers", to: "runtime:harness-lifecycle", kind: "configures" },
     { from: "runtime:helpers", to: "tool:http-request", kind: "loads" },
     { from: "runtime:helpers", to: "tool:json-utils", kind: "loads" },
     { from: "runtime:helpers", to: "tool:platform-api", kind: "loads" },

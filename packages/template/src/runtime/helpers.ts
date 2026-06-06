@@ -30,6 +30,7 @@ import { createCompactionMiddleware } from "./middleware/compaction.js";
 import { createEvictionMiddleware } from "./middleware/eviction.js";
 import { createHookMiddleware, getHooks, registerConfiguredHooks } from "../app/hooks/index.js";
 import { createProtectedPathsMiddleware } from "./middleware/protected-paths.js";
+import { createHarnessLifecycleMiddleware } from "./middleware/harness-lifecycle.js";
 
 // ─── Runtime Context ────────────────────────────────────
 
@@ -662,6 +663,8 @@ export function buildAgentConfigParts(
   const middleware: AgentMiddleware[] = [];
   const mwConfig = config.middleware;
   registerConfiguredHooks(config.hooks, workspaceRoot);
+
+  middleware.push(createHarnessLifecycleMiddleware());
 
   // Memory middleware — explicitly created with addCacheControl for Anthropic prompt caching.
   // Falls back to the `memory` shortcut parameter when no backend is provided.

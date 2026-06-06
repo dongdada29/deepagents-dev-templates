@@ -11,6 +11,7 @@ describe("code graph", () => {
     expect(nodeIds).toContain("entry:index");
     expect(nodeIds).toContain("runtime:acp-server");
     expect(nodeIds).toContain("runtime:code-graph");
+    expect(nodeIds).toContain("runtime:harness-lifecycle");
     expect(nodeIds).toContain("tool:platform-api");
     expect(nodeIds).toContain("tool:mcp-bridge");
     expect(nodeIds).toContain("config:mcp");
@@ -20,6 +21,7 @@ describe("code graph", () => {
     expect(edgeIds).toContain("entry:index->runtime:acp-server:calls");
     expect(edgeIds).toContain("runtime:helpers->tool:platform-api:loads");
     expect(edgeIds).toContain("runtime:mcp-manager->config:mcp:loads");
+    expect(edgeIds).toContain("runtime:helpers->runtime:harness-lifecycle:configures");
     expect(edgeIds).toContain("script:package->manifest:package:packages");
   });
 });

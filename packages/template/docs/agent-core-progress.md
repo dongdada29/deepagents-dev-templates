@@ -18,7 +18,7 @@ what remains blocked by platform or protocol dependencies.
 | Dimension | Current Level | Notes |
 |---|---:|---|
 | DeepAgents template runtime | 85% | Runtime, tools, skills, ACP entry, config, and tests are in place. |
-| Product-grade agent core | 74% | Guarded ACP internals and durable local session metadata exist; harness lifecycle, sandbox profiles, and auth/logout remain planned. |
+| Product-grade agent core | 78% | Guarded ACP internals, durable local session metadata, and harness lifecycle snapshots exist; sandbox profiles and auth/logout remain planned. |
 | Nuwax/Zed integration | Supported | Real Zed ACP launch, streaming, tool calls, and permissions have been validated. |
 | Distribution lifecycle | Supported locally | npm tgz, Nuwax tar/zip, version/platform JSON, checksums, local install, upgrade, rollback, and uninstall scripts exist; platform production installer validation remains planned. |
 
@@ -38,6 +38,7 @@ what remains blocked by platform or protocol dependencies.
 | P0 | Workspace + Safety | Protected path denial for runtime files | Supported | `protected-paths` tests | Keep deny checks independent of ACP internals. |
 | P1 | Context + Memory | Runtime storage, messages, plan, todos, checkpoints | Supported | `runtime-storage.ts`, unit tests | Add migration docs for platform install layout. |
 | P1 | Context + Memory | Durable session metadata, list, read, and close markers | Supported locally | `readSessionMetadata`, `readRuntimeMessages`, `closeSessionState`, ACP list/close merge | Add platform-backed load semantics when ACP/client contract is stable. |
+| P1 | Context + Memory | Harness lifecycle: phase, turn snapshot, busy state, pending writes | Supported locally | `harness-lifecycle.ts`, `middleware/harness-lifecycle.ts`, ACP prompt lifecycle wrapper, `runtime_info.includeLifecycle` | Add client-visible lifecycle events if ACP client contract exposes them. |
 | P1 | Context + Memory | Conversation history, memory, checkpoint tools | Supported | Tool registry and unit tests | Add scenario examples using these tools. |
 | P1 | Context + Memory | Compaction and large output eviction | Supported | Unit tests and integration notes | Add end-to-end long-session scenario later. |
 | P0 | Tooling + Integration | Built-in custom tools | Supported | `src/app/tools/` and tests | Keep tool descriptions scenario-agent friendly. |
@@ -49,7 +50,6 @@ what remains blocked by platform or protocol dependencies.
 | P0 | Scenario Agent Generation | User prompt to Agent Spec workflow | Supported | `skills/builtin/agent-requirement-to-spec/SKILL.md`, `prompts/developer-agent.system.md`, `docs/scenario-agent-examples.md` | Add automated smoke examples later. |
 | P0 | Scenario Agent Generation | `.nuwax-agent` capability source separation | Supported | `.nuwax-agent/capability-sources.json`, `.nuwax-agent/panel.config.json`, `.nuwax-agent/debug.agent_servers.example.json` | Wire panel schema validation when platform schemas are available. |
 | P0 | Product-Grade Gaps | Reduce private `deepagents-acp` patch risk | Supported locally | `src/runtime/acp-server-internals.ts` centralizes private access with runtime guards and tests | Move to upstream-supported hooks when available. |
-| P1 | Product-Grade Gaps | Harness lifecycle: phase, turn snapshot, busy state, pending writes | Planned | pi-mono comparison | Design before runtime change. |
 | P1 | Product-Grade Gaps | Durable session load semantics | Planned | Codex ACP comparison | Add DB or stable session index when ACP/client load contract is stable. |
 | P2 | Product-Grade Gaps | ACP auth/logout capability | Planned | Codex ACP comparison | Add only if target clients require it. |
 | P2 | Product-Grade Gaps | Stronger sandbox/environment profiles | Planned | Codex permission profile comparison | Define profile model before implementation. |
@@ -64,8 +64,8 @@ what remains blocked by platform or protocol dependencies.
 
 ### P1
 
-- Strengthen session persistence semantics.
-- Add harness lifecycle design before runtime changes.
+- Strengthen session persistence load semantics.
+- Add client-visible lifecycle events when the ACP client contract supports them.
 
 ### P2
 

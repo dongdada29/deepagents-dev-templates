@@ -158,6 +158,9 @@ agent-package.json              # Distribution manifest
 - ✅ Install / upgrade / rollback / uninstall lifecycle scripts with local artifact smoke validation
 - ✅ npm/tgz/git distribution surfaces in `agent-package.json`
 - ✅ Runtime verification (`node dist/index.js --help`)
+- ✅ Guarded ACP internals adapter for private `deepagents-acp` access
+- ✅ Durable local session metadata/read/close/list foundations
+- ✅ Harness lifecycle snapshots for phase, busy state, turn counters, tool/model calls, and pending writes
 - ✅ Compaction middleware (auto-compress context when approaching limit)
 - ✅ Eviction middleware (auto-evict large tool outputs to backend)
 - ✅ ACP integration tests (TC-01~TC-06, TC-12~TC-16) with real LLM
