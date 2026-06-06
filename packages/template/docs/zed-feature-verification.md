@@ -10,6 +10,7 @@
 2. 确认 `~/.config/zed/settings.json` 中 `agent_servers.deepagents-template` 的 `args` 指向当前工作树的 `src/index.ts`（Zed 用 `tsx` 跑源码，dist 不存在也无所谓）。
 3. **重启 Zed 或 reload agent server** — Zed 不会自动重新加载 ACP server 进程。
 4. 打开一个终端 tab 便于 `cat` / `ls` 文件系统状态。`LOG_DIR` 指向 `/Users/apple/workspace/deepagents-dev-templates/logs` 时日志落盘，模型出错时第一个看的地方。
+5. **Sanity check 保护区文件** — 在跑任何场景前，verify `packages/template/src/runtime/acp-server.ts` 第 1 行仍是 `/**`，不是 `// HACK` 之类的人为改动。`git status packages/template/src/runtime/` 应当是 clean。这一步保证你从干净基线开始验证，否则保护区测试可能因为已经被改过的文件混淆视听。
 
 ## 1 分钟快速烟测
 
@@ -318,6 +319,7 @@ cat ~/.deepagents/workspaces/*/sessions/<sid>/messages.jsonl
 | 版本号仍是 0.1.1 | 验证 `packages/template/config/app-agent.config.json:6` 和 `package.json` 一致；后者是 fallback 来源 |
 | OpenAI 兼容崩 | 检查 `@langchain/openai` 版本 >= 1.3.0（v0.2.0 修复了 0.5.x 的 duplicate @langchain/core 问题） |
 | Compaction 没触发 | `config.middleware.compaction.contextWindow * triggerThreshold` 必须被消息 token 数超过；用 `runtime_info` 看 `currentTurn.endedAt` 之类的 hint 不准（compaction 是 middleware 行为，harness lifecycle 不直接观测） |
+| **直接文件编辑绕过保护区** | `protected-paths` middleware 只守 **agent 工具调用**（`write_file`/`edit_file`），不守直接 `sed`/`Edit`/`vim`/linter 的人类编辑。TC-16 验证的是「agent 拒绝」，不是「文件绝对不可变」。要 OS-level 保护（`chmod -w`/git hooks）请自行加。 |
 
 ## 自动化烟测命令
 
