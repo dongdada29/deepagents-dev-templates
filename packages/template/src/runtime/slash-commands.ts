@@ -202,6 +202,48 @@ const COMMANDS: SlashCommandDefinition[] = [
     }),
   },
   {
+    name: "permissions",
+    aliases: ["pmode", "perm"],
+    description: "切换 deepagents 权限 mode (yolo|plan|ask)，仅影响新 session",
+    environments: ["cli", "acp"],
+    inputHint: "<yolo|plan|ask>",
+    execute: (_ctx, parsed) => {
+      const arg = parsed.arg.trim().toLowerCase();
+      const valid = ["yolo", "plan", "ask"];
+      if (!arg) {
+        const current = process.env.DEEPAGENTS_PERMISSIONS_MODE || "(unset → uses config default)";
+        return {
+          kind: "handled",
+          text: [
+            "Deepagents 权限 mode:",
+            `  当前 env:  ${current}`,
+            `  config 默认: ${arg || "(见 app-agent.config.json)"}`,
+            "",
+            "用法: /permissions yolo|plan|ask",
+            "说明: 改 env 变量只对新建的 session 生效 — 当前 session 的 mode 在 agent 启动时已 baked-in。",
+            "       要应用新 mode, 需开新 session（或重启 agent server）。",
+          ].join("\n"),
+        };
+      }
+      if (!valid.includes(arg)) {
+        return {
+          kind: "handled",
+          text: `无效 mode: '${parsed.arg}'。可选: ${valid.join(", ")}`,
+        };
+      }
+      process.env.DEEPAGENTS_PERMISSIONS_MODE = arg;
+      return {
+        kind: "handled",
+        text: [
+          `Deepagents 权限 mode 已设为: ${arg}`,
+          "",
+          "影响范围: 仅新建的 session。当前 session 的 mode 仍为启动时的值。",
+          "下一步: 在 Zed 中 disconnect 当前 session, 然后新建一个（或重启 agent server）。",
+        ].join("\n"),
+      };
+    },
+  },
+  {
     name: "clear",
     description: "清屏",
     environments: ["cli"],

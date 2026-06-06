@@ -289,11 +289,44 @@ cat ~/.deepagents/workspaces/*/sessions/<sid>/messages.jsonl
 
 ---
 
-## 场景 8 — HITL 权限弹窗（plan 模式 + edit_file）
+## 场景 8 — HITL 权限弹窗（ask 模式 + edit_file）
 
-**目的**：验证 `interruptOn` 机制在 plan/ask 模式下能弹权限弹窗。
+**目的**：验证 `interruptOn` 机制在 `permissions.mode: "ask"` 下能弹权限弹窗。
 
-**确保 mode 是 `ask`**（默认），并把 test client 切到 "reject" 选项（参照 `tests/acp-verify.ts:71-73` 的默认行为）。
+**重要：本模板有两套独立的 mode 系统 — 不要混淆。**
+
+| 系统 | 配置位置 | 控制 | Zed 暴露 |
+|---|---|---|---|
+| ACP mode（slash command 切）| `app-agent.config.json` `modes.availableModes` | Zed UI 的 plan/agent/ask 标签，UX / 提示词风格 | ✅ 是 |
+| Deepagents 权限 mode（影响 HITL）| `app-agent.config.json` `permissions.mode` | `interruptOn` 是否触发，文件能否被写 | ❌ 否 |
+
+**v0.2.0 默认**：`permissions.mode = "ask"`（在 `app-agent.config.json:27`），所以开箱就有权限弹窗。Zed UI 切 ACP mode 不影响 deepagents 权限 mode — 它们是正交的两条线。
+
+**想覆盖默认**：在 `~/.config/zed/settings.json` 加：
+```json
+"env": {
+  "DEEPAGENTS_PERMISSIONS_MODE": "yolo"   // 或 "plan"
+}
+```
+然后 reload agent。
+
+**v0.2.0+ 也支持 slash command 切换（不需重启）**：
+```
+/permissions ask
+/permissions plan
+/permissions yolo
+/permissions             # 无参 — 显示当前 env + 用法
+/pmode yolo              # 别名
+/perm ask                # 短别名
+```
+**重要**：`/permissions` 设置 `DEEPAGENTS_PERMISSIONS_MODE` env var，但**当前 session 的 mode 仍为启动时的 baked-in 值**。要应用新 mode：
+1. 在 Zed 里 disconnect 当前 session
+2. 新建一个 session（自动读最新 env var）
+3. 重新发 prompt 验证弹窗
+
+这是诚实的设计 — 真正的「in-session mode flip」需要重建 LangGraph agent（v0.2.0 范围外）。如果你的部署需要频繁切 mode，建议部署多个 agent server 实例（每个 instance 自己的 `DEEPAGENTS_PERMISSIONS_MODE` env）。
+
+**测试 client 切到 "reject" 选项**（参照 `tests/acp-verify.ts:71-73` 的默认行为）。
 
 **提示词**：
 ```
@@ -304,6 +337,8 @@ cat ~/.deepagents/workspaces/*/sessions/<sid>/messages.jsonl
 - agent 发出 `requestPermission` 弹窗
 - 默认选项 "reject" — agent_message_chunk 输出 "I can't do this"
 - 切到 "allow-once" — `edit_file` 工具调用，文件实际修改
+
+**如果没看到弹窗**：检查 `app-agent.config.json:27` 是否是 `"ask"`、Zed 进程是否 reload 过（v0.2.0 之前的早期配置是 `"yolo"`，需要改回来）。或者 `DEEPAGENTS_PERMISSIONS_MODE` env var 是否设了 `yolo`/`plan`。
 
 ---
 
