@@ -157,6 +157,29 @@ function isAcpMcpForwardingEnabled(): boolean {
   return process.env.ACP_MCP_FORWARDING !== "disabled";
 }
 
+/**
+ * Read this package's version from package.json as a fallback for the
+ * `serverVersion` advertised by `DeepAgentsServer`. Cached at module
+ * load. Used when `config.agent.version` is left unset in
+ * `app-agent.config.json` — the package version is the most common
+ * default in templates.
+ */
+let cachedPackageVersion: string | undefined;
+function readPackageVersionSafe(): string | undefined {
+  if (cachedPackageVersion !== undefined) return cachedPackageVersion;
+  try {
+    // Resolve relative to this file so the lookup works regardless of cwd.
+    const { readFileSync } = require("node:fs") as typeof import("node:fs");
+    const { dirname, join } = require("node:path") as typeof import("node:path");
+    const pkgPath = join(dirname(new URL(import.meta.url).pathname), "..", "package.json");
+    const parsed = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: string };
+    cachedPackageVersion = typeof parsed?.version === "string" ? parsed.version : undefined;
+  } catch {
+    cachedPackageVersion = undefined;
+  }
+  return cachedPackageVersion;
+}
+
 // ─── Session Lifecycle Patch ────────────────────────────
 
 /**
@@ -661,10 +684,15 @@ export async function bootstrap(options: ACPServerOptions = {}): Promise<void> {
   const { agentConfig, mcpManager } = await buildACPAgentConfigWithMcpAsync(config, workspaceRoot, sessionConfig);
 
   // Start the ACP server
+  // serverVersion: prefer the config's agent.version (so consumers can
+  // pin a release tag), but fall back to this package's version when
+  // the config leaves it unset. This keeps the version Zed displays
+  // in sync with `npm view deepagents-dev-templates version`.
+  const pkgVersion = readPackageVersionSafe();
   const server = new DeepAgentsServer({
     agents: agentConfig,
     serverName: config.agent.name,
-    serverVersion: config.agent.version,
+    serverVersion: config.agent.version || pkgVersion || "0.0.0",
     workspaceRoot,
     debug: process.env.LOG_LEVEL === "debug",
   });
