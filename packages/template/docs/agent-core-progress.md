@@ -18,7 +18,7 @@ what remains blocked by platform or protocol dependencies.
 | Dimension | Current Level | Notes |
 |---|---:|---|
 | DeepAgents template runtime | 85% | Runtime, tools, skills, ACP entry, config, and tests are in place. |
-| Product-grade agent core | 70% | Harness lifecycle, durable sessions, sandbox profiles, and auth/logout remain planned. |
+| Product-grade agent core | 74% | Guarded ACP internals and durable local session metadata exist; harness lifecycle, sandbox profiles, and auth/logout remain planned. |
 | Nuwax/Zed integration | Supported | Real Zed ACP launch, streaming, tool calls, and permissions have been validated. |
 | Distribution lifecycle | Supported locally | npm tgz, Nuwax tar/zip, version/platform JSON, checksums, local install, upgrade, rollback, and uninstall scripts exist; platform production installer validation remains planned. |
 
@@ -37,6 +37,7 @@ what remains blocked by platform or protocol dependencies.
 | P0 | Workspace + Safety | Editable zone separation | Supported | `template.manifest.json`, prompt rules, permission middleware | Keep `src/runtime/` protected by default. |
 | P0 | Workspace + Safety | Protected path denial for runtime files | Supported | `protected-paths` tests | Keep deny checks independent of ACP internals. |
 | P1 | Context + Memory | Runtime storage, messages, plan, todos, checkpoints | Supported | `runtime-storage.ts`, unit tests | Add migration docs for platform install layout. |
+| P1 | Context + Memory | Durable session metadata, list, read, and close markers | Supported locally | `readSessionMetadata`, `readRuntimeMessages`, `closeSessionState`, ACP list/close merge | Add platform-backed load semantics when ACP/client contract is stable. |
 | P1 | Context + Memory | Conversation history, memory, checkpoint tools | Supported | Tool registry and unit tests | Add scenario examples using these tools. |
 | P1 | Context + Memory | Compaction and large output eviction | Supported | Unit tests and integration notes | Add end-to-end long-session scenario later. |
 | P0 | Tooling + Integration | Built-in custom tools | Supported | `src/app/tools/` and tests | Keep tool descriptions scenario-agent friendly. |
@@ -47,9 +48,9 @@ what remains blocked by platform or protocol dependencies.
 | P1 | Distribution + Observability | Code graph and inspector | Supported | `npm run graph`, inspector package | Include graph entry in platform JSON. |
 | P0 | Scenario Agent Generation | User prompt to Agent Spec workflow | Supported | `skills/builtin/agent-requirement-to-spec/SKILL.md`, `prompts/developer-agent.system.md`, `docs/scenario-agent-examples.md` | Add automated smoke examples later. |
 | P0 | Scenario Agent Generation | `.nuwax-agent` capability source separation | Supported | `.nuwax-agent/capability-sources.json`, `.nuwax-agent/panel.config.json`, `.nuwax-agent/debug.agent_servers.example.json` | Wire panel schema validation when platform schemas are available. |
-| P0 | Product-Grade Gaps | Reduce private `deepagents-acp` patch risk | Planned | Current ACP server patches private internals | Isolate patches or move to upstream-supported hooks. |
+| P0 | Product-Grade Gaps | Reduce private `deepagents-acp` patch risk | Supported locally | `src/runtime/acp-server-internals.ts` centralizes private access with runtime guards and tests | Move to upstream-supported hooks when available. |
 | P1 | Product-Grade Gaps | Harness lifecycle: phase, turn snapshot, busy state, pending writes | Planned | pi-mono comparison | Design before runtime change. |
-| P1 | Product-Grade Gaps | Durable session list/load/close semantics | Planned | Codex ACP comparison | Add DB or stable session index later. |
+| P1 | Product-Grade Gaps | Durable session load semantics | Planned | Codex ACP comparison | Add DB or stable session index when ACP/client load contract is stable. |
 | P2 | Product-Grade Gaps | ACP auth/logout capability | Planned | Codex ACP comparison | Add only if target clients require it. |
 | P2 | Product-Grade Gaps | Stronger sandbox/environment profiles | Planned | Codex permission profile comparison | Define profile model before implementation. |
 | P0 | Platform Validation | Nuwax production endpoint validation | Blocked | Needs platform credentials | Validate component list, prompt save, and debug sessions. |
@@ -63,8 +64,6 @@ what remains blocked by platform or protocol dependencies.
 
 ### P1
 
-- Reduce `deepagents-acp` private patch risk.
-- Add durable install/upgrade/uninstall lifecycle scripts.
 - Strengthen session persistence semantics.
 - Add harness lifecycle design before runtime changes.
 

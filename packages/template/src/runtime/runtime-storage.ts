@@ -39,7 +39,9 @@ export interface SessionSummary {
   path: string;
   createdAt?: string;
   updatedAt?: string;
+  closedAt?: string;
   mode?: string;
+  status?: string;
   messageCount?: number;
 }
 
@@ -136,6 +138,7 @@ export function ensureSessionState(
     workspaceRoot: storage.workspaceRoot,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
+    status: existing?.status ?? "active",
     ...existing,
     ...metadata,
   });
@@ -185,11 +188,76 @@ export function listSessions(workspaceRoot = process.cwd()): SessionSummary[] {
       path: sessionDir,
       createdAt: stringValue(metadata.createdAt),
       updatedAt: stringValue(metadata.updatedAt),
+      closedAt: stringValue(metadata.closedAt),
       mode: stringValue(metadata.mode),
+      status: stringValue(metadata.status),
       messageCount: countJsonlLines(join(sessionDir, "messages.jsonl")),
     });
   }
   return sessions.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+}
+
+export function readSessionMetadata(
+  workspaceRoot: string,
+  sessionId: string
+): Record<string, unknown> | null {
+  const storage = getRuntimeStorage({ workspaceRoot, sessionId });
+  return readJson(storage.metadataPath);
+}
+
+export function readRuntimeMessages(
+  workspaceRoot: string,
+  sessionId: string
+): RuntimeMessage[] {
+  const storage = getRuntimeStorage({ workspaceRoot, sessionId });
+  const content = readTextIfExists(storage.messagesPath);
+  if (!content) {
+    return [];
+  }
+
+  const messages: RuntimeMessage[] = [];
+  for (const line of content.split("\n")) {
+    if (!line.trim()) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(line) as RuntimeMessage;
+      messages.push(parsed);
+    } catch {
+      messages.push({
+        role: "system",
+        content: line,
+      });
+    }
+  }
+  return messages;
+}
+
+export function closeSessionState(
+  workspaceRoot: string,
+  sessionId: string,
+  metadata: Record<string, unknown> = {}
+): SessionSummary {
+  const storage = getRuntimeStorage({ workspaceRoot, sessionId });
+  ensureSessionState(storage);
+  const closedAt = new Date().toISOString();
+  updateSessionMetadata(storage, {
+    status: "closed",
+    closedAt,
+    updatedAt: closedAt,
+    ...metadata,
+  });
+
+  return {
+    sessionId: storage.sessionId,
+    path: storage.sessionDir,
+    createdAt: stringValue(readSessionMetadata(workspaceRoot, sessionId)?.createdAt),
+    updatedAt: closedAt,
+    closedAt,
+    mode: stringValue(readSessionMetadata(workspaceRoot, sessionId)?.mode),
+    status: "closed",
+    messageCount: countJsonlLines(storage.messagesPath),
+  };
 }
 
 export function memoryPath(agentName: string, workspaceRoot = process.cwd()): string {

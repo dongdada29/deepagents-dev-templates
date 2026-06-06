@@ -5,12 +5,15 @@ import { join } from "node:path";
 import { mkdtempSync } from "node:fs";
 import {
   appendRuntimeMessage,
+  closeSessionState,
   ensureSessionState,
   getRuntimeStorage,
   listSessions,
   memoryPath,
   migrateLegacyState,
   readableMemoryPath,
+  readRuntimeMessages,
+  readSessionMetadata,
 } from "../../src/runtime/runtime-storage.js";
 
 describe("runtime-storage", () => {
@@ -53,6 +56,25 @@ describe("runtime-storage", () => {
     expect(content.trim().split("\n")).toHaveLength(2);
     expect(listSessions(workspaceRoot)[0]?.sessionId).toBe("sess_messages");
     expect(listSessions(workspaceRoot)[0]?.messageCount).toBe(2);
+  });
+
+  it("reads messages and marks sessions closed durably", () => {
+    const storage = getRuntimeStorage({ workspaceRoot, sessionId: "sess_close" });
+    appendRuntimeMessage({ role: "user", content: "hello" }, storage);
+
+    const closed = closeSessionState(workspaceRoot, "sess_close", { mode: "agent" });
+
+    expect(closed.status).toBe("closed");
+    expect(closed.messageCount).toBe(1);
+    expect(readSessionMetadata(workspaceRoot, "sess_close")?.status).toBe("closed");
+    expect(readRuntimeMessages(workspaceRoot, "sess_close")).toEqual([
+      expect.objectContaining({ role: "user", content: "hello" }),
+    ]);
+    expect(listSessions(workspaceRoot)[0]).toMatchObject({
+      sessionId: "sess_close",
+      status: "closed",
+      messageCount: 1,
+    });
   });
 
   it("reads legacy memory until it is migrated", () => {

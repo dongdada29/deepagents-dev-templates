@@ -22,6 +22,11 @@ import { logger } from "./logger.js";
 import type { MCPManager } from "./mcp-manager.js";
 import { forwardAcpMcpServers } from "./mcp-acp-adapter.js";
 import {
+  bindInternalHandler,
+  getDeepAgentsServerInternals,
+  type DeepAgentsServerInternals,
+} from "./acp-server-internals.js";
+import {
   createRuntimeContext,
   createRuntimeContextAsync,
   buildAgentConfigParts,
@@ -33,8 +38,10 @@ import {
 } from "./slash-commands.js";
 import {
   appendRuntimeMessage,
+  closeSessionState,
   ensureSessionState,
   getRuntimeStorage,
+  listSessions,
   withRuntimeStorageContext,
 } from "./runtime-storage.js";
 
@@ -77,28 +84,6 @@ interface AcpConnection {
       };
     };
   }): Promise<void>;
-}
-
-interface AcpSessionState {
-  id: string;
-  agentName: string;
-  mode?: string;
-}
-
-interface DeepAgentsServerInternals {
-  handleNewSession?: (...args: unknown[]) => Promise<unknown>;
-  handleLoadSession?: (...args: unknown[]) => Promise<unknown>;
-  handlePrompt?: (...args: unknown[]) => Promise<unknown>;
-  handleCancel?: (...args: unknown[]) => Promise<unknown>;
-  handleSetSessionMode?: (...args: unknown[]) => Promise<unknown>;
-  handleCloseSession?: (...args: unknown[]) => Promise<unknown>;
-  handleListSessions?: (...args: unknown[]) => Promise<unknown>;
-  sessions?: Map<string, AcpSessionState & Record<string, unknown>>;
-  agentConfigs?: Map<string, DeepAgentConfig>;
-  agents?: Map<string, unknown>;
-  acpBackends?: Map<string, { setSessionId?: (sessionId: string) => void }>;
-  workspaceRoot?: string;
-  createAgent?: (agentName: string) => void;
 }
 
 /**
@@ -195,7 +180,12 @@ function patchSessionLifecycle(
 ): SessionManager {
   const log = logger.child("session-lifecycle");
   const manager = new SessionManager();
-  const s = server as unknown as DeepAgentsServerInternals;
+  const s = getDeepAgentsServerInternals(server, [
+    "agent-configs",
+    "sessions",
+    "agents",
+    "acp-backends",
+  ]);
   const mcpForwardingEnabled = isAcpMcpForwardingEnabled();
   let activeConfig = config;
   let activeMcpManager = mcpManager;
@@ -235,9 +225,9 @@ function patchSessionLifecycle(
     activeWorkspaceRoot = requestedWorkspaceRoot;
     s.workspaceRoot = requestedWorkspaceRoot;
     agentConfig.interruptOn = {};
-    s.agentConfigs?.set(agentConfig.name, agentConfig);
-    s.agents?.delete(agentConfig.name);
-    s.acpBackends?.delete(agentConfig.name);
+    s.agentConfigs.set(agentConfig.name, agentConfig);
+    s.agents.delete(agentConfig.name);
+    s.acpBackends.delete(agentConfig.name);
 
     log.info("Using ACP session cwd as workspace root", {
       workspaceRoot: requestedWorkspaceRoot,
@@ -245,18 +235,18 @@ function patchSessionLifecycle(
   };
 
   const ensureClientSession = (params: AcpNewSessionParams): void => {
-    if (!params.sessionId || s.sessions?.has(params.sessionId)) {
+    if (!params.sessionId || s.sessions.has(params.sessionId)) {
       return;
     }
 
     const agentName =
       params.configOptions?.agent ??
-      Array.from(s.agentConfigs?.keys() ?? [])[0];
-    if (!agentName || !s.agentConfigs?.has(agentName)) {
+      Array.from(s.agentConfigs.keys())[0];
+    if (!agentName || !s.agentConfigs.has(agentName)) {
       throw new Error(`Unknown agent: ${agentName ?? "(none)"}`);
     }
 
-    s.sessions?.set(params.sessionId, {
+    s.sessions.set(params.sessionId, {
       id: params.sessionId,
       agentName,
       threadId: randomUUID(),
@@ -265,10 +255,10 @@ function patchSessionLifecycle(
       lastActivityAt: new Date(),
       mode: params.mode ?? "agent",
     });
-    if (!s.agents?.has(agentName)) {
+    if (!s.agents.has(agentName)) {
       s.createAgent?.(agentName);
     }
-    s.acpBackends?.get(agentName)?.setSessionId?.(params.sessionId);
+    s.acpBackends.get(agentName)?.setSessionId?.(params.sessionId);
     manager.track(params.sessionId, params.mode ?? "agent");
     sessionWorkspaces.set(params.sessionId, {
       config: activeConfig,
@@ -295,7 +285,7 @@ function patchSessionLifecycle(
   // [...DEFAULT_COMMANDS, ...customCommands], where customCommands comes from
   // agentConfig.commands (set to getAcpSlashCommandSpecs() in buildACPAgentConfig).
   // A second send would race with the first and produce inconsistent UI.
-  const origNewSession = s.handleNewSession?.bind(server);
+  const origNewSession = bindInternalHandler(server, s.handleNewSession);
   if (origNewSession) {
     s.handleNewSession = async (...args: unknown[]) => {
       const params = args[0] as AcpNewSessionParams;
@@ -321,7 +311,7 @@ function patchSessionLifecycle(
     };
   }
 
-  const origLoadSession = s.handleLoadSession?.bind(server);
+  const origLoadSession = bindInternalHandler(server, s.handleLoadSession);
   if (origLoadSession) {
     s.handleLoadSession = async (...args: unknown[]) => {
       const params = args[0] as AcpNewSessionParams;
@@ -332,7 +322,7 @@ function patchSessionLifecycle(
   }
 
   // Patch handlePrompt for activity tracking + stale session recovery
-  const origPrompt = s.handlePrompt?.bind(server);
+  const origPrompt = bindInternalHandler(server, s.handlePrompt);
   if (origPrompt) {
     s.handlePrompt = async (...args: unknown[]) => {
       const params = args[0] as AcpPromptParams;
@@ -390,7 +380,7 @@ function patchSessionLifecycle(
               created: newSession.sessionId,
             });
             // Use the patched handlePrompt (not origPrompt) for activity tracking
-            return await (s.handlePrompt as Function)(
+            return await s.handlePrompt?.(
               { ...params, sessionId: newSession.sessionId },
               conn
             );
@@ -402,7 +392,7 @@ function patchSessionLifecycle(
   }
 
   // Patch handleCancel for activity tracking
-  const origCancel = s.handleCancel?.bind(server);
+  const origCancel = bindInternalHandler(server, s.handleCancel);
   if (origCancel) {
     s.handleCancel = async (...args: unknown[]) => {
       const params = args[0] as { sessionId?: string };
@@ -411,7 +401,7 @@ function patchSessionLifecycle(
     };
   }
 
-  const origSetSessionMode = s.handleSetSessionMode?.bind(server);
+  const origSetSessionMode = bindInternalHandler(server, s.handleSetSessionMode);
   if (origSetSessionMode) {
     s.handleSetSessionMode = async (...args: unknown[]) => {
       const params = args[0] as AcpNewSessionParams;
@@ -425,18 +415,51 @@ function patchSessionLifecycle(
   s.handleCloseSession = async (...args: unknown[]) => {
     const params = args[0] as { sessionId: string };
     const info = manager.close(params.sessionId);
-    s.sessions?.delete(params.sessionId);
     sessionMcpServers.delete(params.sessionId);
+    const sessionWorkspace = sessionWorkspaces.get(params.sessionId) ?? {
+      config: activeConfig,
+      workspaceRoot: activeWorkspaceRoot,
+    };
+    s.sessions.delete(params.sessionId);
     sessionWorkspaces.delete(params.sessionId);
     if (!info) {
       return { error: `Session not found: ${params.sessionId}` };
     }
-    return { closed: true, sessionId: params.sessionId, messages: info.messageCount };
+    const persisted = closeSessionState(sessionWorkspace.workspaceRoot, params.sessionId, {
+      mode: info.mode,
+      agent: sessionWorkspace.config.agent.name,
+      environment: "acp",
+    });
+    return {
+      closed: true,
+      sessionId: params.sessionId,
+      messages: info.messageCount,
+      persisted,
+    };
   };
 
   // Add listSessions method
   s.handleListSessions = async (..._args: unknown[]) => {
-    return { sessions: manager.list(), total: manager.count };
+    const persisted = listSessions(activeWorkspaceRoot);
+    const activeById = new Map(manager.list().map((session) => [session.sessionId, session]));
+    const merged = persisted.map((session) => ({
+      ...session,
+      active: activeById.has(session.sessionId),
+      ...(activeById.get(session.sessionId) ?? {}),
+    }));
+    for (const active of activeById.values()) {
+      if (!persisted.some((session) => session.sessionId === active.sessionId)) {
+        const storage = getRuntimeStorage({ workspaceRoot: activeWorkspaceRoot, sessionId: active.sessionId });
+        merged.push({
+          ...active,
+          active: true,
+          path: storage.sessionDir,
+          updatedAt: active.lastActivityAt,
+          status: "active",
+        });
+      }
+    }
+    return { sessions: merged, total: merged.length };
   };
 
   log.info("Session lifecycle patch applied", {
@@ -458,9 +481,9 @@ async function handleAcpSlashCommand(options: {
     return null;
   }
 
-  const session = options.server.sessions?.get(options.params.sessionId);
+  const session = options.server.sessions.get(options.params.sessionId);
   const agentConfig = session
-    ? options.server.agentConfigs?.get(session.agentName)
+    ? options.server.agentConfigs.get(session.agentName)
     : undefined;
 
   const result = executeSlashCommand(text, {

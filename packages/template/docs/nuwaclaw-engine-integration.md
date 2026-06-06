@@ -2,7 +2,7 @@
 
 This document defines the V1 contract for installing and launching this template as a nuwaclaw agent engine.
 
-For the planned tar/zip package lifecycle, version/platform JSON, installation,
+For the tar/zip package lifecycle, version/platform JSON, local installation,
 upgrade, rollback, and uninstall flow, see
 [Package Install Lifecycle](./package-install-lifecycle.md).
 

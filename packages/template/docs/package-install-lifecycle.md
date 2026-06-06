@@ -64,7 +64,7 @@ scripts/package.sh
 scripts/install.sh
 ```
 
-Planned scripts:
+Lifecycle scripts:
 
 ```text
 scripts/create-tar.sh
