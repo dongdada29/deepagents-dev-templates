@@ -230,11 +230,21 @@ function readLifecycleFile(storage: RuntimeStorage): HarnessLifecycleSnapshot | 
   }
 }
 
+// Cache the directory-exists check so we don't run mkdirSync on every write.
+// The lifecycle file lives at <sessionDir>/harness-lifecycle.json; once its
+// parent exists (after the first call), mkdirSync is a no-op syscall but
+// still costs a stat+mkdir. Caching the path avoids that overhead on the
+// 50+ writes per turn.
+const ensuredDirs = new WeakSet<RuntimeStorage>();
+
 function writeLifecycle(
   storage: RuntimeStorage,
   snapshot: HarnessLifecycleSnapshot
 ): HarnessLifecycleSnapshot {
-  mkdirSync(dirname(storage.lifecyclePath), { recursive: true });
+  if (!ensuredDirs.has(storage)) {
+    mkdirSync(dirname(storage.lifecyclePath), { recursive: true });
+    ensuredDirs.add(storage);
+  }
   writeFileSync(storage.lifecyclePath, `${JSON.stringify(snapshot, null, 2)}\n`, "utf-8");
   return snapshot;
 }

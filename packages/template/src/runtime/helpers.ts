@@ -802,21 +802,20 @@ export function buildAgentConfigParts(
     workspaceRoot
   );
 
-  // Protected paths middleware is orthogonal to HITL mode. We always enforce
-  // the sandbox's `deniedWritePaths` (when non-empty) by wrapping the tool
-  // call before it reaches the filesystem — because `DeepAgentsServer` in
-  // ACP mode drops the `permissions` field from `createDeepAgent`, so the
-  // `permissions` array alone cannot protect files. This used to live only
-  // in the `else` (non-yolo) branch, which left yolo+workspace-write /
-  // yolo+read-only silently unprotected (regression surfaced by the
-  // branch-merge review). Now it runs in every mode.
+  // Protected paths middleware: wraps the tool call regardless of mode.
+  // Needed because `DeepAgentsServer` in ACP mode drops the `permissions`
+  // field from `createDeepAgent`, so the `permissions` array alone
+  // cannot protect files. Gated only on the sandbox's denied paths.
   if (sandbox.deniedWritePaths.length > 0) {
     const deniedGlobs = sandbox.deniedWritePaths.map((d) => toAbsoluteDenyGlob(d, workspaceRoot));
     middleware.push(createProtectedPathsMiddleware({ deniedGlobs }));
   }
 
   if (mode === "yolo") {
-    // No HITL. Sandbox profiles can still enforce path restrictions unless explicitly open.
+    // No HITL. Path restrictions are enforced by the protected-paths
+    // middleware (pushed above, regardless of mode) — the `permissions`
+    // array is kept here for non-ACP callers and is dropped by
+    // DeepAgentsServer in ACP mode anyway.
     interruptOn = {};
     permissions = sandbox.profile === "open"
       ? [{ operations: ["read", "write"], paths: ["/**"], mode: "allow" as const }]

@@ -12,6 +12,7 @@ import {
   recordHarnessModelCall,
 } from "../../src/runtime/harness-lifecycle.js";
 import { getRuntimeStorage } from "../../src/runtime/runtime-storage.js";
+import { createHarnessLifecycleMiddleware } from "../../src/runtime/middleware/harness-lifecycle.js";
 
 describe("harness-lifecycle", () => {
   const originalEnv = { ...process.env };
@@ -157,6 +158,103 @@ describe("harness-lifecycle", () => {
       inputPreview: "dying",
     });
     expect(snap.currentTurn!.endedAt).toBeDefined();
+  });
+
+  // ─── Middleware wiring regression (G7 fix) ───────────────────────────
+  // The tests above call the begin/complete/fail primitives directly, which
+  // would still pass if the harness-lifecycle middleware's beforeAgent /
+  // afterAgent / wrapModelCall-catch hooks were silently removed (the
+  // original G7 bug: counters.turns stayed at 0 because the hooks were
+  // never invoked). The tests below call the hooks on the middleware
+  // object directly to verify the wiring is intact.
+
+  it("createHarnessLifecycleMiddleware wires beforeAgent → beginHarnessTurn (G7 regression)", async () => {
+    const sessionId = "sess_mw_begin";
+    // Set the AsyncLocalStorage context for the duration of the hook so
+    // getRuntimeStorage() in the lifecycle module reads the right session.
+    const { withRuntimeStorageContext } = await import(
+      "../../src/runtime/runtime-storage.js"
+    );
+    await withRuntimeStorageContext({ workspaceRoot, sessionId }, async () => {
+      const mw = createHarnessLifecycleMiddleware();
+      expect(mw.name).toBe("harnessLifecycle");
+      expect(typeof mw.beforeAgent).toBe("function");
+
+      // Simulate langchain passing state with a user message in the messages
+      // array — the middleware should extract the preview.
+      const fakeState = {
+        messages: [
+          { role: "system", content: "you are a helpful assistant" },
+          { role: "human", content: "what is 2+2?" },
+        ],
+      };
+      await mw.beforeAgent!(fakeState as never, {} as never);
+
+      const snap = readHarnessLifecycle(
+        getRuntimeStorage({ workspaceRoot, sessionId })
+      );
+      expect(snap.phase).toBe("running");
+      expect(snap.busy).toBe(true);
+      expect(snap.counters.turns).toBe(1);
+      expect(snap.currentTurn?.inputPreview).toBe("what is 2+2?");
+    });
+  });
+
+  it("createHarnessLifecycleMiddleware wires afterAgent → completeHarnessTurn", async () => {
+    const sessionId = "sess_mw_complete";
+    const { withRuntimeStorageContext } = await import(
+      "../../src/runtime/runtime-storage.js"
+    );
+    await withRuntimeStorageContext({ workspaceRoot, sessionId }, async () => {
+      const mw = createHarnessLifecycleMiddleware();
+
+      await mw.beforeAgent!(
+        { messages: [{ role: "human", content: "go" }] } as never,
+        {} as never
+      );
+      expect(readHarnessLifecycle(getRuntimeStorage({ workspaceRoot, sessionId })).phase).toBe("running");
+
+      await mw.afterAgent!({} as never, {} as never);
+      const snap = readHarnessLifecycle(
+        getRuntimeStorage({ workspaceRoot, sessionId })
+      );
+      expect(snap.phase).toBe("idle");
+      expect(snap.busy).toBe(false);
+      // Counters persist across the turn boundary — only phase/busy flip.
+      expect(snap.counters.turns).toBe(1);
+    });
+  });
+
+  it("createHarnessLifecycleMiddleware wires wrapModelCall catch → failHarnessTurn", async () => {
+    const sessionId = "sess_mw_fail";
+    const { withRuntimeStorageContext } = await import(
+      "../../src/runtime/runtime-storage.js"
+    );
+    await withRuntimeStorageContext({ workspaceRoot, sessionId }, async () => {
+      const mw = createHarnessLifecycleMiddleware();
+
+      await mw.beforeAgent!(
+        { messages: [{ role: "human", content: "x" }] } as never,
+        {} as never
+      );
+
+      // Simulate a model call that throws.
+      const throwingHandler = async () => {
+        throw new Error("rate-limit-429");
+      };
+      await expect(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (mw.wrapModelCall as any)({ toolCall: { name: "model", id: "tc_1", args: {} } }, throwingHandler)
+      ).rejects.toThrow("rate-limit-429");
+
+      const snap = readHarnessLifecycle(
+        getRuntimeStorage({ workspaceRoot, sessionId })
+      );
+      // The catch path must mark the turn failed; counters.failedTurns++.
+      expect(snap.phase).toBe("failed");
+      expect(snap.counters.failedTurns).toBe(1);
+      expect(snap.lastError).toBe("rate-limit-429");
+    });
   });
 });
 

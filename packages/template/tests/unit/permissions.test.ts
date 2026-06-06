@@ -205,7 +205,7 @@ describe("buildAgentConfigParts — protected-paths middleware gating (I-1 regre
     expect(findProtectedPaths(parts)).toBeDefined();
   });
 
-  it("yolo + read-only pushes protected-paths middleware with /** deny", () => {
+  it("yolo + read-only pushes protected-paths middleware", () => {
     const parts = buildAgentConfigParts(
       makeFullConfig("yolo", "read-only"),
       undefined,
@@ -214,10 +214,10 @@ describe("buildAgentConfigParts — protected-paths middleware gating (I-1 regre
     );
     const mw = findProtectedPaths(parts);
     expect(mw).toBeDefined();
-    // The middleware receives deniedGlobs as a private option; we check
-    // indirectly by reading the captured state through the public test
-    // surface. The presence of the middleware is the gate; the globs are
-    // validated by buildPermissions tests above.
+    // The /** glob construction is covered by the buildPermissions
+    // "supports read-only and open sandbox profiles" test above; this
+    // test only asserts the middleware is in the stack (the regression
+    // vector for I-1 was missing middleware, not wrong globs).
   });
 
   it("yolo + open does NOT push protected-paths middleware", () => {
