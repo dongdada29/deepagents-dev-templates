@@ -1,0 +1,55 @@
+{
+  "$schema": "https://agent.nuwax.com/schemas/nuwax-agent-sandbox-profiles.v1.json",
+  "schemaVersion": "nuwax.agent.sandbox-profiles.v1",
+  "defaultProfile": "workspace-write",
+  "profiles": {
+    "open": {
+      "description": "Trusted local debugging only. No package-level write restrictions.",
+      "runtime": {
+        "permissionMode": "yolo"
+      },
+      "filesystem": {
+        "deniedWritePaths": [],
+        "writablePaths": ["/**"]
+      }
+    },
+    "workspace-write": {
+      "description": "Default development profile. App, prompts, skills, and config can be edited while runtime internals stay protected.",
+      "runtime": {
+        "permissionMode": "ask"
+      },
+      "filesystem": {
+        "deniedWritePaths": ["src/runtime/"],
+        "writablePaths": ["src/app/", "prompts/", "skills/", "config/"]
+      }
+    },
+    "read-only": {
+      "description": "Inspection profile. Writes are denied across the workspace.",
+      "runtime": {
+        "permissionMode": "ask"
+      },
+      "filesystem": {
+        "deniedWritePaths": ["/"],
+        "writablePaths": []
+      }
+    }
+  },
+  "environment": {
+    "allowedEnv": [
+      "LLM_PROVIDER",
+      "OPENAI_MODEL",
+      "OPENAI_BASE_URL",
+      "ANTHROPIC_MODEL",
+      "ANTHROPIC_BASE_URL",
+      "MAX_TOKENS",
+      "LOG_LEVEL",
+      "LOG_DIR"
+    ],
+    "secretEnv": [
+      "OPENAI_API_KEY",
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_AUTH_TOKEN",
+      "PLATFORM_API_TOKEN"
+    ]
+  }
+}

@@ -79,6 +79,7 @@ and package installation.
 | `debug.agent_servers.example.json` | Zed-compatible `agent_servers` example using absolute path placeholders. |
 | `cloud-debug.profile.json` | Cloud computer debug profile with command, args, env placeholders, logs path, and workspace root. |
 | `capability-sources.json` | Declares whether each capability comes from ACP dynamic config, agent builtin, env builtin, package placeholder, or future work. |
+| `sandbox-profiles.json` | Declares local debug and packaged runtime sandbox/environment profiles. |
 | `agent.spec.example.json` | Example structured Agent Spec generated from a user request. |
 | `placeholders.json` | Placeholder catalog for install/package-time values. |
 | `package.config.json` | Packaging include/exclude and install replacement rules. |

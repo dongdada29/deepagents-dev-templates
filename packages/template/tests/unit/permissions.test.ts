@@ -10,10 +10,10 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { buildPermissions } from "../../src/runtime/helpers.js";
+import { buildPermissions, resolveSandboxPolicy } from "../../src/runtime/helpers.js";
 import type { AppConfig } from "../../src/runtime/config-loader.js";
 
-function makeConfig(deniedPaths: string[]): AppConfig {
+function makeConfig(deniedPaths: string[], sandbox?: Partial<AppConfig["sandbox"]>): AppConfig {
   return {
     agent: { name: "test-agent" },
     model: {
@@ -29,6 +29,7 @@ function makeConfig(deniedPaths: string[]): AppConfig {
       allowedPaths: [],
       deniedPaths,
     },
+    sandbox,
   } as unknown as AppConfig;
 }
 
@@ -82,5 +83,51 @@ describe("buildPermissions", () => {
     const perms = buildPermissions(makeConfig(["src/runtime/"]));
     const deny = perms.find((p) => p.mode === "deny");
     expect(deny!.paths).toEqual(["/src/runtime/**"]);
+  });
+
+  it("uses workspace-write sandbox denied paths when configured", () => {
+    const config = makeConfig(["legacy-deny/"], {
+      profile: "workspace-write",
+      writablePaths: ["src/app/"],
+      deniedWritePaths: ["src/runtime/", "dist/"],
+      environment: { allowedEnv: [], secretEnv: [] },
+    });
+
+    const policy = resolveSandboxPolicy(config);
+    const denies = buildPermissions(config, workspaceRoot).filter((p) => p.mode === "deny");
+
+    expect(policy.profile).toBe("workspace-write");
+    expect(denies.map((deny) => deny.paths[0])).toEqual([
+      "/Users/dev/my-project/src/runtime/**",
+      "/Users/dev/my-project/dist/**",
+    ]);
+  });
+
+  it("supports read-only and open sandbox profiles", () => {
+    const readOnly = buildPermissions(
+      makeConfig(["src/runtime/"], {
+        profile: "read-only",
+        writablePaths: [],
+        deniedWritePaths: [],
+        environment: { allowedEnv: [], secretEnv: [] },
+      }),
+      workspaceRoot
+    );
+    expect(readOnly[0]).toMatchObject({
+      mode: "deny",
+      operations: ["write"],
+      paths: ["/**"],
+    });
+
+    const open = buildPermissions(
+      makeConfig(["src/runtime/"], {
+        profile: "open",
+        writablePaths: ["/**"],
+        deniedWritePaths: [],
+        environment: { allowedEnv: [], secretEnv: [] },
+      }),
+      workspaceRoot
+    );
+    expect(open.filter((permission) => permission.mode === "deny")).toEqual([]);
   });
 });

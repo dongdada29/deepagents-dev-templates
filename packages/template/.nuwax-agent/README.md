@@ -25,8 +25,8 @@ No real secrets should be committed here. Use placeholders such as `${SECRET_OPE
 - `debug.agent_servers.example.json` mirrors the Zed ACP `agent_servers` shape for local and cloud debug.
 - `cloud-debug.profile.json` defines a cloud-computer debug launch profile.
 - `capability-sources.json` maps capabilities to ACP, builtin, env, package, or future sources.
+- `sandbox-profiles.json` declares local debug and packaged runtime sandbox/environment profiles.
 - `agent.spec.example.json` is the canonical output shape for turning user intent into a scenario Agent.
 - `placeholders.json` lists package-time and install-time placeholders.
 - `package.config.json` declares packaging targets and replacement rules.
 - `lifecycle.json` sketches install, upgrade, and uninstall hooks.
-

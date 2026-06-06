@@ -161,6 +161,7 @@ agent-package.json              # Distribution manifest
 - ✅ Guarded ACP internals adapter for private `deepagents-acp` access
 - ✅ Durable local session metadata/read/close/list foundations
 - ✅ Harness lifecycle snapshots for phase, busy state, turn counters, tool/model calls, and pending writes
+- ✅ Sandbox/environment profiles (`custom`, `workspace-write`, `read-only`, `open`) with env override and `.nuwax-agent` panel metadata
 - ✅ Compaction middleware (auto-compress context when approaching limit)
 - ✅ Eviction middleware (auto-evict large tool outputs to backend)
 - ✅ ACP integration tests (TC-01~TC-06, TC-12~TC-16) with real LLM

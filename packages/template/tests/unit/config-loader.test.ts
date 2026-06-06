@@ -157,6 +157,13 @@ describe("config-loader", () => {
     expect(config.logging.level).toBe("warn");
   });
 
+  it("DEEPAGENTS_SANDBOX_PROFILE env var selects sandbox profile", async () => {
+    process.env.DEEPAGENTS_SANDBOX_PROFILE = "read-only";
+    const { loadConfig } = await import("../../src/runtime/config-loader.js");
+    const config = loadConfig({ configPath: "/nonexistent.json" });
+    expect(config.sandbox.profile).toBe("read-only");
+  });
+
   it("MCP_CONFIG_PATH env var sets the default MCP config path", async () => {
     process.env.MCP_CONFIG_PATH = "./config/mcp.custom.json";
     const { loadConfig } = await import("../../src/runtime/config-loader.js");

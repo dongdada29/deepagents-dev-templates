@@ -588,6 +588,55 @@ export function discoverSubAgents(config: AppConfig, workspaceRoot?: string): Di
 
 // ─── Permissions ────────────────────────────────────────
 
+export interface SandboxPolicy {
+  profile: "custom" | "workspace-write" | "read-only" | "open";
+  deniedWritePaths: string[];
+  writablePaths: string[];
+  allowedEnv: string[];
+  secretEnv: string[];
+}
+
+export function resolveSandboxPolicy(config: AppConfig): SandboxPolicy {
+  const sandbox = config.sandbox;
+  if (!sandbox || sandbox.profile === "custom") {
+    return {
+      profile: "custom",
+      deniedWritePaths: config.permissions.deniedPaths,
+      writablePaths: config.permissions.allowedPaths,
+      allowedEnv: sandbox?.environment.allowedEnv ?? [],
+      secretEnv: sandbox?.environment.secretEnv ?? [],
+    };
+  }
+
+  if (sandbox.profile === "open") {
+    return {
+      profile: "open",
+      deniedWritePaths: [],
+      writablePaths: ["/**"],
+      allowedEnv: sandbox.environment.allowedEnv,
+      secretEnv: sandbox.environment.secretEnv,
+    };
+  }
+
+  if (sandbox.profile === "read-only") {
+    return {
+      profile: "read-only",
+      deniedWritePaths: ["/"],
+      writablePaths: [],
+      allowedEnv: sandbox.environment.allowedEnv,
+      secretEnv: sandbox.environment.secretEnv,
+    };
+  }
+
+  return {
+    profile: "workspace-write",
+    deniedWritePaths: sandbox.deniedWritePaths,
+    writablePaths: sandbox.writablePaths,
+    allowedEnv: sandbox.environment.allowedEnv,
+    secretEnv: sandbox.environment.secretEnv,
+  };
+}
+
 /**
  * Build filesystem permissions for deepagents.
  *
@@ -602,8 +651,9 @@ export function discoverSubAgents(config: AppConfig, workspaceRoot?: string): Di
  */
 export function buildPermissions(config: AppConfig, workspaceRoot?: string): FilesystemPermission[] {
   const permissions: FilesystemPermission[] = [];
+  const sandbox = resolveSandboxPolicy(config);
 
-  for (const denied of config.permissions.deniedPaths) {
+  for (const denied of sandbox.deniedWritePaths) {
     // Build the absolute path WITHOUT `resolve` eating the trailing slash.
     // We need `/abs/dir/**` (not `/abs/dir**`) to avoid matching siblings like
     // `/abs/dirfoo/x`. So: take the absolute base, ensure it ends in `/`, then
@@ -737,17 +787,20 @@ export function buildAgentConfigParts(
   );
 
   if (mode === "yolo") {
-    // No HITL, no path restrictions
+    // No HITL. Sandbox profiles can still enforce path restrictions unless explicitly open.
     interruptOn = {};
-    permissions = [{ operations: ["read", "write"], paths: ["/**"], mode: "allow" as const }];
+    permissions = resolveSandboxPolicy(config).profile === "open"
+      ? [{ operations: ["read", "write"], paths: ["/**"], mode: "allow" as const }]
+      : buildPermissions(config, workspaceRoot);
   } else {
     // plan OR ask: protected paths are enforced. deepagents-acp's
     // DeepAgentsServer drops `permissions` when calling `createDeepAgent`, so
     // we mirror the deny rules with our own middleware that wraps the tool
     // call before it reaches the filesystem. Skipped in yolo since there are
     // no deny rules to enforce there.
-    if (config.permissions.deniedPaths.length > 0) {
-      const deniedGlobs = config.permissions.deniedPaths.map((denied) => {
+    const sandbox = resolveSandboxPolicy(config);
+    if (sandbox.deniedWritePaths.length > 0) {
+      const deniedGlobs = sandbox.deniedWritePaths.map((denied) => {
         const base = denied.endsWith("/") ? denied : `${denied}/`;
         const absolute = base.startsWith("/")
           ? base

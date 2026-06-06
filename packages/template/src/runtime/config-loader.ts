@@ -109,6 +109,37 @@ export const PermissionsConfigSchema = z.object({
   deniedPaths: z.array(z.string()).default(["src/runtime/"]),
 });
 
+export const SandboxConfigSchema = z.object({
+  /**
+   * Sandbox profile:
+   * - "custom": preserve `permissions.deniedPaths` behavior.
+   * - "workspace-write": allow normal workspace edits while protecting runtime paths.
+   * - "read-only": deny all writes.
+   * - "open": no sandbox deny rules; useful for trusted local debugging only.
+   */
+  profile: z.enum(["custom", "workspace-write", "read-only", "open"]).default("custom"),
+  writablePaths: z.array(z.string()).default(["src/app/", "prompts/", "skills/", "config/"]),
+  deniedWritePaths: z.array(z.string()).default(["src/runtime/"]),
+  environment: z.object({
+    allowedEnv: z.array(z.string()).default([
+      "LLM_PROVIDER",
+      "OPENAI_MODEL",
+      "OPENAI_BASE_URL",
+      "ANTHROPIC_MODEL",
+      "ANTHROPIC_BASE_URL",
+      "MAX_TOKENS",
+      "LOG_LEVEL",
+      "LOG_DIR",
+    ]),
+    secretEnv: z.array(z.string()).default([
+      "OPENAI_API_KEY",
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_AUTH_TOKEN",
+      "PLATFORM_API_TOKEN",
+    ]),
+  }).default({}),
+});
+
 export const SkillsConfigSchema = z.object({
   directories: z.array(z.string()).default([
     "~/.deepagents/skills",
@@ -204,6 +235,7 @@ export const AppConfigSchema = z.object({
   mcp: MCPConfigSchema.default({}),
   platform: PlatformConfigSchema.default({}),
   permissions: PermissionsConfigSchema.default({}),
+  sandbox: SandboxConfigSchema.default({}),
   skills: SkillsConfigSchema.default({}),
   /**
    * Paths to `.agents` directories that contain skills/ and agents/ subdirectories.
@@ -246,6 +278,7 @@ export type AppConfig = z.infer<typeof AppConfigSchema>;
 export type ModelConfig = z.infer<typeof ModelConfigSchema>;
 export type PlatformConfig = z.infer<typeof PlatformConfigSchema>;
 export type PermissionsConfig = z.infer<typeof PermissionsConfigSchema>;
+export type SandboxConfig = z.infer<typeof SandboxConfigSchema>;
 export type CompactionConfig = z.infer<typeof CompactionConfigSchema>;
 export type EvictionConfig = z.infer<typeof EvictionConfigSchema>;
 
@@ -275,6 +308,7 @@ const ENV_MAP: Record<string, string> = {
   MCP_CONFIG_PATH: "mcp.configPath",
   LOG_LEVEL: "logging.level",
   DEEPAGENTS_PERMISSIONS_MODE: "permissions.mode",
+  DEEPAGENTS_SANDBOX_PROFILE: "sandbox.profile",
 };
 
 // ─── Helper Functions ───────────────────────────────────

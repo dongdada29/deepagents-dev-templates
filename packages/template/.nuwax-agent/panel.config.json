@@ -71,10 +71,16 @@
       "mcp_tool_bridge"
     ]
   },
+  "sandbox": {
+    "source": "acp-dynamic",
+    "editable": true,
+    "profileConfigPath": ".nuwax-agent/sandbox-profiles.json",
+    "defaultProfile": "workspace-write",
+    "profiles": ["open", "workspace-write", "read-only"]
+  },
   "publish": {
     "source": "package-placeholder",
     "artifactTypes": ["nuwax-tar", "nuwax-zip", "npm-tgz"],
     "configPath": ".nuwax-agent/package.config.json"
   }
 }
-

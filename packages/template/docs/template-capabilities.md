@@ -70,6 +70,7 @@ These capabilities are designed to be delivered by nuwaclaw or the Nuwax platfor
 | Platform endpoint map | `config/platform.json`, `config.platform.endpoints` | Keeps Nuwax API path changes out of source code. |
 | Skills | `config.skills.directories` | Lets the platform or project add skill directories. |
 | Permissions | `config.permissions` | Protects runtime code while allowing app/prompt/skill/config changes. |
+| Sandbox profile | `config.sandbox`, `DEEPAGENTS_SANDBOX_PROFILE`, `.nuwax-agent/sandbox-profiles.json` | Supports `custom`, `workspace-write`, `read-only`, and `open` local runtime profiles. |
 | Distribution source | `agent-package.json.source`, `alternativeSources` | Supports npm, local/private `.tgz`, and git refs. |
 | Code graph | `node dist/index.js graph` or `npm run graph` | Emits `nuwaclaw.agent-code-graph.v1` for generated-code node relationship UI. |
 | Harness lifecycle | `runtime_info(includeLifecycle=true)` and `~/.deepagents/.../harness-lifecycle.json` | Tracks phase, busy state, turn snapshot, model/tool calls, and pending writes locally. |

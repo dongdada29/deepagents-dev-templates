@@ -18,7 +18,7 @@ what remains blocked by platform or protocol dependencies.
 | Dimension | Current Level | Notes |
 |---|---:|---|
 | DeepAgents template runtime | 85% | Runtime, tools, skills, ACP entry, config, and tests are in place. |
-| Product-grade agent core | 78% | Guarded ACP internals, durable local session metadata, and harness lifecycle snapshots exist; sandbox profiles and auth/logout remain planned. |
+| Product-grade agent core | 82% | Guarded ACP internals, durable local session metadata, harness lifecycle snapshots, and local sandbox profiles exist; auth/logout remains planned. |
 | Nuwax/Zed integration | Supported | Real Zed ACP launch, streaming, tool calls, and permissions have been validated. |
 | Distribution lifecycle | Supported locally | npm tgz, Nuwax tar/zip, version/platform JSON, checksums, local install, upgrade, rollback, and uninstall scripts exist; platform production installer validation remains planned. |
 
@@ -39,6 +39,7 @@ what remains blocked by platform or protocol dependencies.
 | P1 | Context + Memory | Runtime storage, messages, plan, todos, checkpoints | Supported | `runtime-storage.ts`, unit tests | Add migration docs for platform install layout. |
 | P1 | Context + Memory | Durable session metadata, list, read, and close markers | Supported locally | `readSessionMetadata`, `readRuntimeMessages`, `closeSessionState`, ACP list/close merge | Add platform-backed load semantics when ACP/client contract is stable. |
 | P1 | Context + Memory | Harness lifecycle: phase, turn snapshot, busy state, pending writes | Supported locally | `harness-lifecycle.ts`, `middleware/harness-lifecycle.ts`, ACP prompt lifecycle wrapper, `runtime_info.includeLifecycle` | Add client-visible lifecycle events if ACP client contract exposes them. |
+| P1 | Workspace + Safety | Sandbox/environment profiles | Supported locally | `sandbox.profile`, `DEEPAGENTS_SANDBOX_PROFILE`, `.nuwax-agent/sandbox-profiles.json`, permission tests | Add platform panel schema validation when Nuwax schemas are available. |
 | P1 | Context + Memory | Conversation history, memory, checkpoint tools | Supported | Tool registry and unit tests | Add scenario examples using these tools. |
 | P1 | Context + Memory | Compaction and large output eviction | Supported | Unit tests and integration notes | Add end-to-end long-session scenario later. |
 | P0 | Tooling + Integration | Built-in custom tools | Supported | `src/app/tools/` and tests | Keep tool descriptions scenario-agent friendly. |
@@ -52,7 +53,7 @@ what remains blocked by platform or protocol dependencies.
 | P0 | Product-Grade Gaps | Reduce private `deepagents-acp` patch risk | Supported locally | `src/runtime/acp-server-internals.ts` centralizes private access with runtime guards and tests | Move to upstream-supported hooks when available. |
 | P1 | Product-Grade Gaps | Durable session load semantics | Planned | Codex ACP comparison | Add DB or stable session index when ACP/client load contract is stable. |
 | P2 | Product-Grade Gaps | ACP auth/logout capability | Planned | Codex ACP comparison | Add only if target clients require it. |
-| P2 | Product-Grade Gaps | Stronger sandbox/environment profiles | Planned | Codex permission profile comparison | Define profile model before implementation. |
+| P2 | Product-Grade Gaps | Platform-enforced sandbox profile validation | Planned | Codex permission profile comparison | Validate panel/runtime profile handoff with Nuwax schemas. |
 | P0 | Platform Validation | Nuwax production endpoint validation | Blocked | Needs platform credentials | Validate component list, prompt save, and debug sessions. |
 
 ## Priority Slices
@@ -70,7 +71,7 @@ what remains blocked by platform or protocol dependencies.
 ### P2
 
 - Add ACP auth/logout if target clients require it.
-- Add stronger sandbox/environment profiles.
+- Add platform-enforced sandbox profile validation.
 - Add long-running context endurance tests.
 
 ## Verification Commands
