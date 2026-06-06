@@ -79,5 +79,84 @@ describe("harness-lifecycle", () => {
       counters: expect.objectContaining({ failedTurns: 1 }),
     });
   });
+
+  // ─── Turn transition primitives (G7 regression) ───────────────────────
+  // These isolate the begin → complete / begin → fail paths so the
+  // middleware's beforeAgent / afterAgent / wrapModelCall-error wiring can be
+  // verified through unit-level primitives. Before this split, only the
+  // combined "tracks turn, model call, tool call, ..." test covered these
+  // transitions, so the missing harness turn tracking bug (counters.turns
+  // stayed at 0) wasn't caught by the existing suite.
+
+  it("beginHarnessTurn transitions idle → running and increments turns", () => {
+    const storage = getRuntimeStorage({ workspaceRoot, sessionId: "sess_begin" });
+
+    expect(readHarnessLifecycle(storage)).toMatchObject({
+      phase: "idle",
+      busy: false,
+      counters: { turns: 0 },
+    });
+    expect(readHarnessLifecycle(storage).currentTurn).toBeUndefined();
+
+    beginHarnessTurn("hi", storage);
+
+    const snap = readHarnessLifecycle(storage);
+    expect(snap.phase).toBe("running");
+    expect(snap.busy).toBe(true);
+    expect(snap.counters.turns).toBe(1);
+    expect(snap.currentTurn).toMatchObject({
+      index: 1,
+      inputPreview: "hi",
+      modelCalls: 0,
+      toolCalls: 0,
+    });
+    expect(snap.currentTurn!.id).toBeDefined();
+    expect(snap.currentTurn!.startedAt).toBeDefined();
+  });
+
+  it("completeHarnessTurn transitions running → idle and freezes counters", () => {
+    const storage = getRuntimeStorage({ workspaceRoot, sessionId: "sess_complete" });
+
+    beginHarnessTurn("first", storage);
+    recordHarnessModelCall(storage);
+    const turnsAfterBegin = readHarnessLifecycle(storage).counters.turns;
+
+    completeHarnessTurn(storage);
+
+    const snap = readHarnessLifecycle(storage);
+    expect(snap.phase).toBe("idle");
+    expect(snap.busy).toBe(false);
+    // turns is a monotonically increasing counter — does NOT decrement.
+    expect(snap.counters.turns).toBe(turnsAfterBegin);
+    // modelCalls counter persists (it's a session-wide counter).
+    expect(snap.counters.modelCalls).toBe(1);
+    // currentTurn retains its snapshot with endedAt set.
+    expect(snap.currentTurn).toMatchObject({
+      index: 1,
+      inputPreview: "first",
+      modelCalls: 1,
+      toolCalls: 0,
+    });
+    expect(snap.currentTurn!.endedAt).toBeDefined();
+  });
+
+  it("failHarnessTurn transitions running → failed and records lastError", () => {
+    const storage = getRuntimeStorage({ workspaceRoot, sessionId: "sess_fail_only" });
+
+    beginHarnessTurn("dying", storage);
+    failHarnessTurn(new Error("kaboom"), storage);
+
+    const snap = readHarnessLifecycle(storage);
+    expect(snap.phase).toBe("failed");
+    expect(snap.busy).toBe(false);
+    expect(snap.counters.failedTurns).toBe(1);
+    expect(snap.lastError).toBe("kaboom");
+    // currentTurn retains its snapshot with endedAt set.
+    expect(snap.currentTurn).toMatchObject({
+      index: 1,
+      inputPreview: "dying",
+    });
+    expect(snap.currentTurn!.endedAt).toBeDefined();
+  });
 });
 
