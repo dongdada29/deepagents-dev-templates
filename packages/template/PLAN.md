@@ -170,6 +170,7 @@ agent-package.json              # Distribution manifest
 - ✅ Real Zed ACP launch, session, prompt streaming, tool calls, and permissions
 - ✅ `.nuwax-agent` development config skeleton for panel fields, Zed/cloud debug, capability source layers, package placeholders, package matrix, and lifecycle hooks
 - ✅ Scenario Agent generation assets: Agent Spec example, `agent-requirement-to-spec` builtin skill, richer target prompt template, and scenario examples document
+- ✅ Scenario Agent Spec smoke tests for capability source layers, acceptance scenarios, and secret-safe variables
 - ⬜ Full nuwaclaw UI ACP prompt/debug integration test (blocked: needs nuwaclaw team)
 - ⬜ Nuwax API production endpoint validation (blocked: needs platform credentials)
 
