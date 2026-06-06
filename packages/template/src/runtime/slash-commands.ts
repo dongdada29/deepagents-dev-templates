@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   getRuntimeStorage,
+  loadSessionState,
   listSessions,
   migrateLegacyState,
   readableMemoryPath,
@@ -129,11 +130,12 @@ const COMMANDS: SlashCommandDefinition[] = [
   },
   {
     name: "session",
-    description: "显示当前会话存储信息",
+    description: "显示当前或指定会话存储信息",
     environments: ["cli", "acp"],
-    execute: (ctx) => ({
+    inputHint: "[sessionId]",
+    execute: (ctx, parsed) => ({
       kind: "handled",
-      text: renderSession(ctx),
+      text: renderSession(ctx, parsed.arg || undefined),
     }),
   },
   {
@@ -377,18 +379,30 @@ function renderSessions(ctx: SlashCommandContext): string {
   ].join("\n");
 }
 
-function renderSession(ctx: SlashCommandContext): string {
-  const storage = getRuntimeStorage({ workspaceRoot: ctx.workspaceRoot, sessionId: ctx.sessionId });
-  const metadata = readTextIfExists(storage.metadataPath);
+function renderSession(ctx: SlashCommandContext, targetSessionId?: string): string {
+  const sessionId = targetSessionId || ctx.sessionId;
+  const storage = getRuntimeStorage({ workspaceRoot: ctx.workspaceRoot, sessionId });
+  const loaded = loadSessionState(ctx.workspaceRoot, storage.sessionId, { maxMessages: 5 });
+  const metadata = loaded.metadata
+    ? JSON.stringify(loaded.metadata, null, 2)
+    : null;
+  const recentMessages = loaded.messages.length > 0
+    ? loaded.messages.map((message) => `  - ${message.role}: ${truncate(String(message.content), 120)}`).join("\n")
+    : "  (none)";
   return [
-    "当前会话:",
+    targetSessionId ? "指定会话:" : "当前会话:",
     `  Session:     ${storage.sessionId}`,
+    `  Exists:      ${loaded.exists}`,
+    `  Status:      ${loaded.summary.status ?? "unknown"}`,
+    `  Updated:     ${loaded.summary.updatedAt ?? "unknown"}`,
+    `  Messages:    ${loaded.summary.messageCount ?? 0}`,
     `  Workspace:   ${storage.workspaceRoot}`,
     `  WorkspaceId: ${storage.workspaceSlug}`,
     `  Path:        ${storage.sessionDir}`,
-    `  Messages:    ${storage.messagesPath}`,
+    `  MessageLog:  ${storage.messagesPath}`,
     `  Plan:        ${storage.planPath}`,
     `  Checkpoints: ${storage.checkpointsDir}`,
+    `\nRecent messages:\n${recentMessages}`,
     metadata ? `\nMetadata:\n${metadata}` : "",
   ].filter(Boolean).join("\n");
 }

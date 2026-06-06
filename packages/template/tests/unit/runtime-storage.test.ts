@@ -8,6 +8,7 @@ import {
   closeSessionState,
   ensureSessionState,
   getRuntimeStorage,
+  loadSessionState,
   listSessions,
   memoryPath,
   migrateLegacyState,
@@ -75,6 +76,25 @@ describe("runtime-storage", () => {
       status: "closed",
       messageCount: 1,
     });
+  });
+
+  it("loads a durable session summary with bounded recent messages", () => {
+    const storage = getRuntimeStorage({ workspaceRoot, sessionId: "sess_load" });
+    appendRuntimeMessage({ role: "user", content: "first" }, storage);
+    appendRuntimeMessage({ role: "assistant", content: "second" }, storage);
+    appendRuntimeMessage({ role: "user", content: "third" }, storage);
+
+    const loaded = loadSessionState(workspaceRoot, "sess_load", { maxMessages: 2 });
+
+    expect(loaded.exists).toBe(true);
+    expect(loaded.summary).toMatchObject({
+      sessionId: "sess_load",
+      status: "active",
+      messageCount: 3,
+    });
+    expect(loaded.messages.map((message) => message.content)).toEqual(["second", "third"]);
+    expect(loaded.plan).toContain("# Plan");
+    expect(loaded.todos).toBe("[]\n");
   });
 
   it("reads legacy memory until it is migrated", () => {

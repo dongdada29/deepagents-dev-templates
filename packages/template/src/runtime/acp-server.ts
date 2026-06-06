@@ -47,6 +47,7 @@ import {
   closeSessionState,
   ensureSessionState,
   getRuntimeStorage,
+  loadSessionState,
   listSessions,
   withRuntimeStorageContext,
 } from "./runtime-storage.js";
@@ -323,6 +324,26 @@ function patchSessionLifecycle(
       const params = args[0] as AcpNewSessionParams;
       await prepareSessionWorkspace(params);
       ensureClientSession(params);
+      if (params.sessionId) {
+        const loaded = loadSessionState(activeWorkspaceRoot, params.sessionId, { maxMessages: 20 });
+        ensureSessionState(
+          getRuntimeStorage({ workspaceRoot: activeWorkspaceRoot, sessionId: params.sessionId }),
+          {
+            mode: params.mode ?? loaded.summary.mode ?? "agent",
+            agent: activeConfig.agent.name,
+            environment: "acp",
+            loadedAt: new Date().toISOString(),
+            loadedMessageCount: loaded.summary.messageCount ?? 0,
+            previousStatus: loaded.summary.status,
+          }
+        );
+        log.info("Loaded durable session summary", {
+          sessionId: params.sessionId,
+          exists: loaded.exists,
+          messages: loaded.summary.messageCount,
+          status: loaded.summary.status,
+        });
+      }
       return await origLoadSession(...args);
     };
   }

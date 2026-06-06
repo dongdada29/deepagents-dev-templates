@@ -160,6 +160,7 @@ agent-package.json              # Distribution manifest
 - ✅ Runtime verification (`node dist/index.js --help`)
 - ✅ Guarded ACP internals adapter for private `deepagents-acp` access
 - ✅ Durable local session metadata/read/close/list foundations
+- ✅ Durable local session load summaries with ACP load metadata marker and `/session <id>` inspection
 - ✅ Harness lifecycle snapshots for phase, busy state, turn counters, tool/model calls, and pending writes
 - ✅ Sandbox/environment profiles (`custom`, `workspace-write`, `read-only`, `open`) with env override and `.nuwax-agent` panel metadata
 - ✅ Compaction middleware (auto-compress context when approaching limit)

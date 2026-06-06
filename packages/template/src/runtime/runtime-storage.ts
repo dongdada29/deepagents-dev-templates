@@ -52,6 +52,16 @@ export interface RuntimeMessage {
   timestamp?: string;
 }
 
+export interface LoadedSessionState {
+  exists: boolean;
+  summary: SessionSummary;
+  metadata: Record<string, unknown> | null;
+  messages: RuntimeMessage[];
+  plan: string | null;
+  todos: string | null;
+  lifecycle: Record<string, unknown> | null;
+}
+
 const contextStore = new AsyncLocalStorage<RuntimeStorageContext>();
 
 export function withRuntimeStorageContext<T>(
@@ -233,6 +243,37 @@ export function readRuntimeMessages(
     }
   }
   return messages;
+}
+
+export function loadSessionState(
+  workspaceRoot: string,
+  sessionId: string,
+  options: { maxMessages?: number } = {}
+): LoadedSessionState {
+  const storage = getRuntimeStorage({ workspaceRoot, sessionId });
+  const metadata = readJson(storage.metadataPath);
+  const messages = readRuntimeMessages(workspaceRoot, sessionId);
+  const maxMessages = options.maxMessages ?? 50;
+  const recentMessages = maxMessages > 0 ? messages.slice(-maxMessages) : messages;
+
+  return {
+    exists: existsSync(storage.sessionDir),
+    summary: {
+      sessionId: storage.sessionId,
+      path: storage.sessionDir,
+      createdAt: stringValue(metadata?.createdAt),
+      updatedAt: stringValue(metadata?.updatedAt),
+      closedAt: stringValue(metadata?.closedAt),
+      mode: stringValue(metadata?.mode),
+      status: stringValue(metadata?.status),
+      messageCount: messages.length,
+    },
+    metadata,
+    messages: recentMessages,
+    plan: readTextIfExists(storage.planPath),
+    todos: readTextIfExists(storage.todosPath),
+    lifecycle: readJson(storage.lifecyclePath),
+  };
 }
 
 export function closeSessionState(

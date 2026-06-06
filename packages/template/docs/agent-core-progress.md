@@ -18,7 +18,7 @@ what remains blocked by platform or protocol dependencies.
 | Dimension | Current Level | Notes |
 |---|---:|---|
 | DeepAgents template runtime | 85% | Runtime, tools, skills, ACP entry, config, and tests are in place. |
-| Product-grade agent core | 82% | Guarded ACP internals, durable local session metadata, harness lifecycle snapshots, and local sandbox profiles exist; auth/logout remains planned. |
+| Product-grade agent core | 84% | Guarded ACP internals, durable local session load summaries, harness lifecycle snapshots, and local sandbox profiles exist; auth/logout remains planned. |
 | Nuwax/Zed integration | Supported | Real Zed ACP launch, streaming, tool calls, and permissions have been validated. |
 | Distribution lifecycle | Supported locally | npm tgz, Nuwax tar/zip, version/platform JSON, checksums, local install, upgrade, rollback, and uninstall scripts exist; platform production installer validation remains planned. |
 
@@ -37,7 +37,7 @@ what remains blocked by platform or protocol dependencies.
 | P0 | Workspace + Safety | Editable zone separation | Supported | `template.manifest.json`, prompt rules, permission middleware | Keep `src/runtime/` protected by default. |
 | P0 | Workspace + Safety | Protected path denial for runtime files | Supported | `protected-paths` tests | Keep deny checks independent of ACP internals. |
 | P1 | Context + Memory | Runtime storage, messages, plan, todos, checkpoints | Supported | `runtime-storage.ts`, unit tests | Add migration docs for platform install layout. |
-| P1 | Context + Memory | Durable session metadata, list, read, and close markers | Supported locally | `readSessionMetadata`, `readRuntimeMessages`, `closeSessionState`, ACP list/close merge | Add platform-backed load semantics when ACP/client contract is stable. |
+| P1 | Context + Memory | Durable session metadata, list, read, load, and close markers | Supported locally | `loadSessionState`, `readSessionMetadata`, `readRuntimeMessages`, `closeSessionState`, `/session <id>`, ACP load/list/close merge | Add DB or stable platform session index when ACP/client contract is stable. |
 | P1 | Context + Memory | Harness lifecycle: phase, turn snapshot, busy state, pending writes | Supported locally | `harness-lifecycle.ts`, `middleware/harness-lifecycle.ts`, ACP prompt lifecycle wrapper, `runtime_info.includeLifecycle` | Add client-visible lifecycle events if ACP client contract exposes them. |
 | P1 | Workspace + Safety | Sandbox/environment profiles | Supported locally | `sandbox.profile`, `DEEPAGENTS_SANDBOX_PROFILE`, `.nuwax-agent/sandbox-profiles.json`, permission tests | Add platform panel schema validation when Nuwax schemas are available. |
 | P1 | Context + Memory | Conversation history, memory, checkpoint tools | Supported | Tool registry and unit tests | Add scenario examples using these tools. |
@@ -51,7 +51,7 @@ what remains blocked by platform or protocol dependencies.
 | P0 | Scenario Agent Generation | User prompt to Agent Spec workflow | Supported | `skills/builtin/agent-requirement-to-spec/SKILL.md`, `prompts/developer-agent.system.md`, `docs/scenario-agent-examples.md`, `scenario-agent-spec.test.ts` | Add platform-driven generation tests later. |
 | P0 | Scenario Agent Generation | `.nuwax-agent` capability source separation | Supported | `.nuwax-agent/capability-sources.json`, `.nuwax-agent/panel.config.json`, `.nuwax-agent/debug.agent_servers.example.json` | Wire panel schema validation when platform schemas are available. |
 | P0 | Product-Grade Gaps | Reduce private `deepagents-acp` patch risk | Supported locally | `src/runtime/acp-server-internals.ts` centralizes private access with runtime guards and tests | Move to upstream-supported hooks when available. |
-| P1 | Product-Grade Gaps | Durable session load semantics | Planned | Codex ACP comparison | Add DB or stable session index when ACP/client load contract is stable. |
+| P1 | Product-Grade Gaps | Durable session load semantics | Supported locally | `loadSessionState`, `/session <id>`, ACP `handleLoadSession` metadata marker | Add platform-backed DB/index if multi-device or remote resume becomes required. |
 | P2 | Product-Grade Gaps | ACP auth/logout capability | Planned | Codex ACP comparison | Add only if target clients require it. |
 | P2 | Product-Grade Gaps | Platform-enforced sandbox profile validation | Planned | Codex permission profile comparison | Validate panel/runtime profile handoff with Nuwax schemas. |
 | P0 | Platform Validation | Nuwax production endpoint validation | Blocked | Needs platform credentials | Validate component list, prompt save, and debug sessions. |
@@ -65,7 +65,7 @@ what remains blocked by platform or protocol dependencies.
 
 ### P1
 
-- Strengthen session persistence load semantics.
+- Add platform-backed durable session index/load semantics when remote resume is required.
 - Add client-visible lifecycle events when the ACP client contract supports them.
 
 ### P2
