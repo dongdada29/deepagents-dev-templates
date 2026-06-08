@@ -81,9 +81,11 @@ install/upgrade/rollback/uninstall scripts; see
 
 Generated release artifacts:
 
-- `deepagents-dev-templates-<version>.tgz`
+- `dist-packages/deepagents-dev-templates-<version>.tgz`
 - `dist-packages/deepagents-dev-templates-<version>-nuwax.tar.gz`
 - `dist-packages/deepagents-dev-templates-<version>-nuwax.zip`
+- `dist-packages/deepagents-dev-templates-<version>.version.json`
+- `dist-packages/deepagents-dev-templates-<version>.platform.json`
 - `agent-package.release.json`
 - `dist-packages/package-checksums.json`
 

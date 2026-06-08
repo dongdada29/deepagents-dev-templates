@@ -193,6 +193,12 @@ bash scripts/uninstall.sh \
 }
 ```
 
+快速渲染安装路径已填好的 ACP 配置：
+
+```bash
+bash scripts/render-acp-config.sh --install-root /opt/nuwax/deepagents-template
+```
+
 模板原型位于：
 
 ```text

@@ -1,6 +1,6 @@
 # Package Install Lifecycle
 
-This document records the planned package, install, upgrade, and uninstall
+This document records the package, install, upgrade, and uninstall
 lifecycle for distributing `packages/template` as a Nuwax Agent engine.
 
 The initial declarative skeleton now lives in `.nuwax-agent/package.config.json`,
@@ -57,23 +57,24 @@ Nuwax tar/zip artifacts for offline auditing.
 
 ## Script Surface
 
-Existing scripts to extend:
+Packaging entry:
 
 ```text
 scripts/package.sh
-scripts/install.sh
 ```
 
-Lifecycle scripts:
+Install / upgrade / uninstall:
 
 ```text
-scripts/create-tar.sh
-scripts/create-zip.sh
-scripts/render-release-manifests.mjs
-scripts/scan-secrets.mjs
-scripts/validate-package.sh
+scripts/install.sh
 scripts/upgrade.sh
 scripts/uninstall.sh
+```
+
+Validation:
+
+```text
+scripts/validate-package.sh
 ```
 
 `package.sh` should support:
