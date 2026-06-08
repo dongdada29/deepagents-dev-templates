@@ -1,0 +1,103 @@
+{
+  "$schema": "https://agent.nuwax.com/schemas/nuwax-agent-distribution.v1.json",
+  "schemaVersion": "nuwax.agent.distribution.v1",
+  "description": "Declares how packaged agent artifacts, metadata, scripts, and manifests are published to a MinIO/S3 bucket so nuwaclaw engines can pull a given version on demand. The config is itself shipped to S3 under each version's manifests/ directory so consumers can introspect the layout.",
+  "endpoint": {
+    "type": "s3",
+    "url": "https://s3.nuwax.com",
+    "region": "us-east-1",
+    "forcePathStyle": true,
+    "signatureVersion": "v4"
+  },
+  "bucket": "nuwax-agent-registry",
+  "engineId": "deepagents-app",
+  "packageName": "deepagents-dev-templates",
+  "agentName": "deepagents-app-agent",
+  "prefix": "engines/deepagents-app",
+  "versioning": {
+    "versionSource": ["package.json", "agent-package.json"],
+    "versionRegex": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?(?:-[0-9A-Za-z.-]+)?$",
+    "requireMatch": true
+  },
+  "channels": {
+    "stable": {
+      "description": "Production releases. Only updated from tags without a pre-release suffix.",
+      "tagPattern": "^v?\\d+\\.\\d+\\.\\d+$",
+      "prerelease": false
+    },
+    "beta": {
+      "description": "Release candidates, betas, and other pre-releases that nuwaclaw users can opt into.",
+      "tagPattern": "^v?\\d+\\.\\d+\\.\\d+-(alpha|beta|rc|preview|dev)\\.\\d+$",
+      "prerelease": true
+    }
+  },
+  "artifacts": {
+    "directory": "versions/{version}/artifacts",
+    "patterns": [
+      "deepagents-dev-templates-{version}-nuwax.zip",
+      "deepagents-dev-templates-{version}-nuwax.tar.gz",
+      "deepagents-dev-templates-{version}.tgz"
+    ]
+  },
+  "metadata": {
+    "directory": "versions/{version}/metadata",
+    "files": [
+      ".version.json",
+      ".platform.json",
+      "package-checksums.json",
+      "agent-package.release.json"
+    ]
+  },
+  "scripts": {
+    "directory": "versions/{version}/scripts",
+    "files": [
+      "scripts/install.sh",
+      "scripts/upgrade.sh",
+      "scripts/uninstall.sh",
+      "scripts/package.sh",
+      "scripts/validate-package.sh",
+      "scripts/publish-s3.sh",
+      "scripts/release.sh"
+    ]
+  },
+  "manifests": {
+    "directory": "versions/{version}/manifests",
+    "files": [
+      "agent-package.json",
+      "template.manifest.json"
+    ],
+    "nuwaxAgentDirectory": ".nuwax-agent"
+  },
+  "pointers": {
+    "latest": "latest.json",
+    "channels": {
+      "stable": "channels/stable.json",
+      "beta": "channels/beta.json"
+    }
+  },
+  "publish": {
+    "concurrency": 4,
+    "cacheControl": {
+      "versioned": "public, max-age=31536000, immutable",
+      "pointers": "public, max-age=60, must-revalidate"
+    },
+    "excludeFromUpload": [
+      "*.local.json",
+      ".env",
+      ".env.local",
+      ".env.example",
+      "logs/**"
+    ]
+  },
+  "consume": {
+    "discoveryEndpoint": "engines/deepagents-app/latest.json",
+    "channelEndpoints": {
+      "stable": "engines/deepagents-app/channels/stable.json",
+      "beta": "engines/deepagents-app/channels/beta.json"
+    },
+    "versionEndpointTemplate": "engines/deepagents-app/versions/{version}/metadata/.version.json",
+    "artifactBaseTemplate": "engines/deepagents-app/versions/{version}/artifacts/",
+    "scriptBaseTemplate": "engines/deepagents-app/versions/{version}/scripts/",
+    "manifestBaseTemplate": "engines/deepagents-app/versions/{version}/manifests/"
+  }
+}

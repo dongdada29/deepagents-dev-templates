@@ -56,6 +56,68 @@
       }
     ]
   },
+  "publish": {
+    "description": "Upload packaged artifacts, metadata, scripts, and manifests to the MinIO/S3 bucket declared in distribution.json. Used by release pipelines and manual publishing.",
+    "script": "scripts/publish-s3.sh",
+    "config": ".nuwax-agent/distribution.json",
+    "steps": [
+      {
+        "id": "verify-distribution-config",
+        "type": "validate-config",
+        "schema": "nuwax.agent.distribution.v1",
+        "path": ".nuwax-agent/distribution.json"
+      },
+      {
+        "id": "verify-artifacts-present",
+        "type": "require-files",
+        "patterns": [
+          "dist-packages/deepagents-dev-templates-${VERSION}.tgz",
+          "dist-packages/deepagents-dev-templates-${VERSION}-nuwax.tar.gz",
+          "dist-packages/deepagents-dev-templates-${VERSION}-nuwax.zip",
+          "dist-packages/deepagents-dev-templates-${VERSION}.version.json",
+          "dist-packages/deepagents-dev-templates-${VERSION}.platform.json",
+          "dist-packages/package-checksums.json",
+          "dist-packages/agent-package.release.json"
+        ]
+      },
+      {
+        "id": "sync-versioned-prefix",
+        "type": "s3-sync",
+        "endpoint": "${NUWAX_S3_ENDPOINT}",
+        "bucket": "${NUWAX_S3_BUCKET}",
+        "destination": "engines/deepagents-app/versions/${VERSION}/"
+      },
+      {
+        "id": "update-channel-pointer",
+        "type": "s3-put",
+        "key": "engines/deepagents-app/channels/${CHANNEL}.json",
+        "cacheControl": "public, max-age=60, must-revalidate"
+      },
+      {
+        "id": "update-latest-pointer",
+        "type": "s3-put-conditional",
+        "condition": "channel == 'stable'",
+        "key": "engines/deepagents-app/latest.json",
+        "cacheControl": "public, max-age=60, must-revalidate"
+      }
+    ]
+  },
+  "release": {
+    "description": "Tag-driven orchestrator that bumps nothing on its own. It assumes package.json and agent-package.json already match the supplied tag, then runs package.sh and publish-s3.sh back-to-back.",
+    "script": "scripts/release.sh",
+    "invocation": "bash scripts/release.sh <git-tag> [--allow-dirty] [--dry-run] [--skip-publish]",
+    "tagPatterns": {
+      "stable": "^v?\\d+\\.\\d+\\.\\d+$",
+      "beta": "^v?\\d+\\.\\d+\\.\\d+-(alpha|beta|rc|preview|dev)\\.\\d+$"
+    },
+    "channelByTag": {
+      "rule": "tag contains '-' → beta, otherwise → stable"
+    },
+    "prerequisites": [
+      "Working tree clean (override with --allow-dirty)",
+      "package.json.version == agent-package.json.version == tag (without leading 'v')"
+    ]
+  },
   "uninstall": {
     "strategy": "remove-package-preserve-export",
     "exportBeforeRemove": [

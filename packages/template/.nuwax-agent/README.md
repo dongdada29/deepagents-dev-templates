@@ -30,4 +30,5 @@ No real secrets should be committed here. Use placeholders such as `${SECRET_OPE
 - `agent.spec.example.json` is the canonical output shape for turning user intent into a scenario Agent.
 - `placeholders.json` lists package-time and install-time placeholders.
 - `package.config.json` declares packaging targets and replacement rules.
-- `lifecycle.json` sketches install, upgrade, and uninstall hooks.
+- `distribution.json` declares how packaged artifacts, metadata, scripts, and manifests are published to a MinIO/S3 bucket for nuwaclaw engines to pull.
+- `lifecycle.json` sketches install, upgrade, uninstall, publish, and tag-driven release hooks.

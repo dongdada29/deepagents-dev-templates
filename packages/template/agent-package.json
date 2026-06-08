@@ -5,13 +5,22 @@
   "engine": "deepagents-app",
 
   "source": {
-    "type": "npm",
-    "package": "deepagents-dev-templates",
-    "registry": "https://registry.npmjs.org",
-    "version": "0.2.1"
+    "type": "s3",
+    "endpoint": "https://s3.nuwax.com",
+    "bucket": "nuwax-agent-registry",
+    "region": "us-east-1",
+    "prefix": "engines/deepagents-app/versions/0.2.1",
+    "version": "0.2.1",
+    "forcePathStyle": true
   },
 
   "alternativeSources": [
+    {
+      "type": "npm",
+      "package": "deepagents-dev-templates",
+      "registry": "https://registry.npmjs.org",
+      "version": "0.2.1"
+    },
     {
       "type": "tgz",
       "path": "./deepagents-dev-templates-0.2.1.tgz",
@@ -21,6 +30,13 @@
       "type": "git",
       "url": "https://github.com/nuwax-ai/deepagents-dev-templates.git",
       "ref": "v0.2.1"
+    },
+    {
+      "type": "s3-channel",
+      "endpoint": "https://s3.nuwax.com",
+      "bucket": "nuwax-agent-registry",
+      "channel": "stable",
+      "pointerPath": "engines/deepagents-app/channels/stable.json"
     }
   ],
 

@@ -6,6 +6,10 @@ For the tar/zip package lifecycle, version/platform JSON, local installation,
 upgrade, rollback, and uninstall flow, see
 [Package Install Lifecycle](./package-install-lifecycle.md).
 
+For publishing packaged artifacts to a MinIO/S3 bucket and how nuwaclaw
+discovers channels / latest version from `latest.json` and
+`channels/<channel>.json`, see [Distribution via MinIO/S3](./distribution-s3.md).
+
 ## Package Contract
 
 The engine package is described by `agent-package.json`.
