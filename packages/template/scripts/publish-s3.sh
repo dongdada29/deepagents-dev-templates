@@ -139,6 +139,11 @@ fi
 ENDPOINT=${NUWAX_S3_ENDPOINT:-$(node -p "require('$DIST_CONFIG').endpoint.url")}
 REGION=${NUWAX_S3_REGION:-$(node -p "require('$DIST_CONFIG').endpoint.region")}
 BUCKET=${NUWAX_S3_BUCKET:-$(node -p "require('$DIST_CONFIG').bucket")}
+# 与 install-from-s3.sh / s3-fetch.sh 一致：自签 MinIO 端点需 --no-verify-ssl
+AWS_S3_COMMON_ARGS=(--endpoint-url "$ENDPOINT" --region "$REGION")
+if [[ "${NUWAX_S3_NO_VERIFY_SSL:-0}" == "1" ]]; then
+  AWS_S3_COMMON_ARGS+=(--no-verify-ssl)
+fi
 ENGINE_ID=$(node -p "require('$DIST_CONFIG').engineId")
 PREFIX=$(node -p "require('$DIST_CONFIG').prefix")
 ARTIFACT_DIR=$(node -e "process.stdout.write(require('$DIST_CONFIG').artifacts.directory.replace('{version}',process.argv[1]))" "$VERSION")
@@ -229,7 +234,7 @@ for f in "${ARTIFACT_FILES[@]}"; do
   src="$OUT_DIR/$f"
   dst="$S3_BASE/$ARTIFACT_DIR/$f"
   echo "  put $f"
-  run_aws s3 cp "$src" "$dst" --endpoint-url "$ENDPOINT" --region "$REGION" \
+  run_aws s3 cp "$src" "$dst" "${AWS_S3_COMMON_ARGS[@]}" \
     --cache-control "public, max-age=31536000, immutable" \
     --content-type "application/octet-stream" >/dev/null
 done
@@ -244,7 +249,7 @@ for f in "${METADATA_FILES[@]}"; do
   esac
   dst="$S3_BASE/$METADATA_DIR/$f"
   echo "  put $f"
-  run_aws s3 cp "$src" "$dst" --endpoint-url "$ENDPOINT" --region "$REGION" \
+  run_aws s3 cp "$src" "$dst" "${AWS_S3_COMMON_ARGS[@]}" \
     --cache-control "public, max-age=31536000, immutable" \
     --content-type "$ext" >/dev/null
 done
@@ -260,7 +265,7 @@ for f in "${SCRIPT_FILES[@]}"; do
   base=$(basename "$f")
   dst="$S3_BASE/$SCRIPTS_DIR/$base"
   echo "  put $base"
-  run_aws s3 cp "$src" "$dst" --endpoint-url "$ENDPOINT" --region "$REGION" \
+  run_aws s3 cp "$src" "$dst" "${AWS_S3_COMMON_ARGS[@]}" \
     --cache-control "public, max-age=31536000, immutable" \
     --content-type "text/x-shellscript" >/dev/null
 done
@@ -275,7 +280,7 @@ for f in "${MANIFEST_FILES[@]}"; do
   fi
   dst="$S3_BASE/$MANIFESTS_DIR/$f"
   echo "  put $f"
-  run_aws s3 cp "$src" "$dst" --endpoint-url "$ENDPOINT" --region "$REGION" \
+  run_aws s3 cp "$src" "$dst" "${AWS_S3_COMMON_ARGS[@]}" \
     --cache-control "public, max-age=31536000, immutable" \
     --content-type "application/json" >/dev/null
 done
@@ -291,7 +296,7 @@ if [[ -d "$PKG_DIR/.nuwax-agent" ]]; then
       *.json) ext="application/json" ;;
     esac
     echo "  put $rel"
-    run_aws s3 cp "$f" "$dst" --endpoint-url "$ENDPOINT" --region "$REGION" \
+    run_aws s3 cp "$f" "$dst" "${AWS_S3_COMMON_ARGS[@]}" \
       --cache-control "public, max-age=31536000, immutable" \
       --content-type "$ext" >/dev/null
   done < <(find "$PKG_DIR/.nuwax-agent" -type f -print0)
@@ -300,7 +305,7 @@ fi
 # The distribution.json itself (so consumers can introspect the layout).
 echo "→ manifests/.nuwax-agent/distribution.json (the config that drove this upload)"
 run_aws s3 cp "$DIST_CONFIG" "$S3_BASE/$MANIFESTS_DIR/.nuwax-agent/distribution.json" \
-  --endpoint-url "$ENDPOINT" --region "$REGION" \
+  "${AWS_S3_COMMON_ARGS[@]}" \
   --cache-control "public, max-age=31536000, immutable" \
   --content-type "application/json" >/dev/null
 
@@ -326,7 +331,7 @@ NODE
     echo "+ aws s3 cp - $S3_BASE/$CHANNEL_KEY <<< $channel_body"
   else
     printf '%s' "$channel_body" | aws s3 cp - "$S3_BASE/$CHANNEL_KEY" \
-      --endpoint-url "$ENDPOINT" --region "$REGION" \
+      "${AWS_S3_COMMON_ARGS[@]}" \
       --cache-control "public, max-age=60, must-revalidate" \
       --content-type "application/json"
   fi
@@ -350,7 +355,7 @@ NODE
       echo "+ aws s3 cp - $S3_BASE/$LATEST_KEY <<< $latest_body"
     else
       printf '%s' "$latest_body" | aws s3 cp - "$S3_BASE/$LATEST_KEY" \
-        --endpoint-url "$ENDPOINT" --region "$REGION" \
+        "${AWS_S3_COMMON_ARGS[@]}" \
         --cache-control "public, max-age=60, must-revalidate" \
         --content-type "application/json"
     fi
@@ -369,7 +374,7 @@ echo "→ bootstrap (install-from-s3.sh)"
 BOOTSTRAP_KEY="$PREFIX/install-from-s3.sh"
 if [[ -f "$PKG_DIR/scripts/install-from-s3.sh" ]]; then
   run_aws s3 cp "$PKG_DIR/scripts/install-from-s3.sh" "s3://$BUCKET/$BOOTSTRAP_KEY" \
-    --endpoint-url "$ENDPOINT" --region "$REGION" \
+    "${AWS_S3_COMMON_ARGS[@]}" \
     --cache-control "public, max-age=60, must-revalidate" \
     --content-type "text/x-shellscript" >/dev/null
   echo "  put install-from-s3.sh → s3://$BUCKET/$BOOTSTRAP_KEY"
