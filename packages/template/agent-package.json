@@ -9,7 +9,7 @@
     "endpoint": "https://s3.nuwax.com",
     "bucket": "nuwax-agent-registry",
     "region": "us-east-1",
-    "prefix": "engines/deepagents-app/versions/0.2.1",
+    "prefix": "agent-engines/deepagents-app/versions/0.2.1",
     "version": "0.2.1",
     "forcePathStyle": true
   },

@@ -253,7 +253,18 @@ bucket_install() {
     exit 1
   fi
 
-  do_install_from_artifact "$artifact" "$INSTALL_ROOT"
+  # Copy the downloaded artifact out of tmp_dir BEFORE do_install_from_artifact
+  # overwrites the trap with its own INSTALL_TMP cleanup.
+  local artifact_copy="$tmp_dir/.deepagents-artifact"
+  cp "$artifact" "$artifact_copy"
+
+  do_install_from_artifact "$artifact_copy" "$INSTALL_ROOT"
+  # do_install_from_artifact sets its own trap for INSTALL_TMP; tmp_dir is still
+  # cleaned up on exit because the outer trap runs on function-scope EXIT and
+  # traps are additive when registered with unique variable names (shell keeps
+  # the last trap for each variable). We manually clean tmp_dir here as a belt-
+  # and-suspenders measure.
+  rm -rf "$tmp_dir"
 }
 
 if [[ "$FROM_BUCKET" -eq 1 ]]; then

@@ -304,7 +304,7 @@ run_aws s3 cp "$DIST_CONFIG" "$S3_BASE/$MANIFESTS_DIR/.nuwax-agent/distribution.
 if [[ "$SKIP_POINTERS" -eq 0 ]]; then
   echo
   echo "→ channels/$CHANNEL.json"
-  channel_body=$(CHANNEL="$CHANNEL" VERSION="$VERSION" GITSHA="$GIT_SHA" DATE="$RELEASE_DATE" node <<'NODE'
+  channel_body=$(CHANNEL="$CHANNEL" VERSION="$VERSION" GITSHA="$GIT_SHA" DATE="$RELEASE_DATE" PREFIX="$PREFIX" node <<'NODE'
 process.stdout.write(JSON.stringify({
   schema: "nuwax.agent.channel.v1",
   channel: process.env.CHANNEL,
@@ -313,8 +313,8 @@ process.stdout.write(JSON.stringify({
   version: process.env.VERSION,
   gitSha: process.env.GITSHA,
   releasedAt: process.env.DATE,
-  artifactBase: `engines/deepagents-app/versions/${process.env.VERSION}/artifacts/`,
-  versionJsonPath: `engines/deepagents-app/versions/${process.env.VERSION}/metadata/.version.json`,
+  artifactBase: `${process.env.PREFIX}/versions/${process.env.VERSION}/artifacts/`,
+  versionJsonPath: `${process.env.PREFIX}/versions/${process.env.VERSION}/metadata/.version.json`,
 }, null, 2) + "\n");
 NODE
 )

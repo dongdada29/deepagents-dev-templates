@@ -86,7 +86,7 @@ echo "Release target: $TAG → version=$VERSION channel=$CHANNEL"
 
 # 3. Working tree cleanliness (only enforced when we'll actually publish).
 if [[ "$SKIP_PUBLISH" -eq 0 && "$ALLOW_DIRTY" -eq 0 ]]; then
-  if ! git diff --quiet HEAD -- .; then
+  if [[ -n "$(git status --porcelain)" ]]; then
     echo "Working tree has uncommitted changes; commit/stash or pass --allow-dirty." >&2
     git status --short
     exit 1

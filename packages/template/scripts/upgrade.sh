@@ -58,6 +58,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --target-version)
       TARGET_VERSION="${2:-}"
+      _EXPLICIT_TARGET_VERSION=1
       shift 2
       ;;
     --no-verify-ssl)
@@ -142,11 +143,7 @@ if [[ "$FROM_BUCKET" -eq 1 ]]; then
   source "$(dirname "$0")/s3-fetch.sh"
   s3_load_env
 
-  if [[ -n "$TARGET_VERSION" ]]; then
-    TARGET_VERSION=$(s3_resolve_version "$CHANNEL" >/dev/null 2>&1 || true; echo "$TARGET_VERSION")
-    # If the user passed an explicit version that already matches the channel
-    # pointer, that's fine; we just trust what they typed.
-  else
+  if [[ -z "$TARGET_VERSION" ]]; then
     TARGET_VERSION=$(s3_resolve_version "$CHANNEL")
   fi
   echo "Target version (channel=$CHANNEL): $TARGET_VERSION"
@@ -168,7 +165,14 @@ if [[ "$FROM_BUCKET" -eq 1 ]]; then
 
   TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/nuwax-agent-upgrade-XXXXXX")
   trap 'rm -rf "$TMP_DIR"' EXIT
-  ARTIFACT=$(s3_fetch_artifact "$CHANNEL" "nuwax-zip" "$TMP_DIR")
+
+  # When the user passed --target-version explicitly, download that version
+  # directly (skip channel resolution). Otherwise resolve via the channel.
+  if [[ -n "${_EXPLICIT_TARGET_VERSION:-}" ]]; then
+    ARTIFACT=$(s3_fetch_artifact_at_version "$TARGET_VERSION" "nuwax-zip" "$TMP_DIR")
+  else
+    ARTIFACT=$(s3_fetch_artifact "$CHANNEL" "nuwax-zip" "$TMP_DIR")
+  fi
   echo "Downloaded: $ARTIFACT"
 fi
 

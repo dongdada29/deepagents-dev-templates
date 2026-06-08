@@ -76,7 +76,7 @@ fi
 
 echo "Resolving channel '$CHANNEL' from s3://$NUWAX_S3_BUCKET/$ENGINE_PREFIX/channels/$CHANNEL.json"
 POINTER=$(aws s3 cp "s3://$NUWAX_S3_BUCKET/$ENGINE_PREFIX/channels/$CHANNEL.json" - "${ENDPOINT_ARGS[@]}")
-VERSION=$(printf '%s' "$POINTER" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{process.stdout.write(JSON.parse(s).version||'')})")
+VERSION=$(printf '%s' "$POINTER" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(JSON.parse(s).version||'')}catch(e){process.stderr.write('Failed to parse channel pointer as JSON. Is NUWAX_S3_ENDPOINT/NUWAX_S3_BUCKET correct?\n'+e.message+'\n');process.exit(2)}})")
 if [[ -z "$VERSION" ]]; then
   echo "Channel pointer for '$CHANNEL' has no .version field" >&2
   exit 1

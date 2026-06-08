@@ -111,7 +111,14 @@ s3_verify_checksum() {
   local file expected actual
   file=$(basename "$artifact")
   expected=$(node -e "const c=require('$checksums');const a=(c.artifacts||[]).find(x=>x.file==='$file');if(!a){process.stderr.write('Artifact not in checksums: $file\n');process.exit(1)}process.stdout.write(a.sha256)")
-  actual=$(shasum -a 256 "$artifact" | awk '{print $1}')
+  if command -v shasum >/dev/null 2>&1; then
+    actual=$(shasum -a 256 "$artifact" | awk '{print $1}')
+  elif command -v sha256sum >/dev/null 2>&1; then
+    actual=$(sha256sum "$artifact" | awk '{print $1}')
+  else
+    echo "No sha256 tool found (tried: shasum, sha256sum). Install coreutils or perl." >&2
+    return 1
+  fi
   if [[ "$expected" != "$actual" ]]; then
     echo "SHA256 mismatch for $file" >&2
     echo "  expected: $expected" >&2
@@ -126,12 +133,22 @@ s3_fetch_artifact() {
   local channel="$1"
   local kind="$2"
   local dest_dir="$3"
-  local bucket prefix
-  bucket=$(s3_bucket)
-  prefix=$(s3_prefix)
 
   local version
   version=$(s3_resolve_version "$channel") || return 1
+
+  s3_fetch_artifact_at_version "$version" "$kind" "$dest_dir"
+}
+
+# Download the artifact for a specific version (skip channel resolution).
+# $1 = version, $2 = kind (nuwax-zip | nuwax-tar | npm-tgz), $3 = dest dir
+s3_fetch_artifact_at_version() {
+  local version="$1"
+  local kind="$2"
+  local dest_dir="$3"
+  local bucket prefix
+  bucket=$(s3_bucket)
+  prefix=$(s3_prefix)
 
   local suffix
   case "$kind" in
@@ -150,7 +167,7 @@ s3_fetch_artifact() {
 
   local checksums
   checksums=$(s3_fetch_checksums "$version" "$dest_dir") || return 1
-  s3_verify_checksum "$dest" "$checksums"
+  s3_verify_checksum "$dest" "$checksums" || return 1
 
   printf '%s' "$dest"
 }
