@@ -67,14 +67,22 @@ s3_engine_id() {
   printf '%s' "${NUWAX_S3_ENGINE_ID:-deepagents-app}"
 }
 
-# Download a single S3 object to a local file.
-# Uses s3api get-object instead of s3 cp to avoid automatic CRC32 checksum
-# validation that AWS CLI v2 performs against MinIO response headers, which
-# can differ from the actual object content due to a MinIO multipart issue.
+# Download a public S3 object to a local file.
+# Always uses --no-sign-request (artifacts/scripts/checksums are public reads).
+# Uses s3api get-object to avoid the CRC32 checksum validation that aws s3 cp
+# performs against MinIO response headers, which can differ from actual content
+# on multipart-uploaded objects.
 # $1 = bucket, $2 = key, $3 = dest path
 _s3_download() {
   local bucket="$1" key="$2" dest="$3"
-  aws s3api get-object --bucket "$bucket" --key "$key" $(s3_endpoint_args) "$dest" >/dev/null
+  local endpoint region
+  endpoint=${NUWAX_S3_ENDPOINT:-https://s3.nuwax.com:9443}
+  region=${NUWAX_S3_REGION:-us-east-1}
+  local args=(--endpoint-url "$endpoint" --region "$region" --no-sign-request)
+  if [[ "${NUWAX_S3_NO_VERIFY_SSL:-0}" == "1" ]]; then
+    args+=(--no-verify-ssl)
+  fi
+  aws s3api get-object --bucket "$bucket" --key "$key" "${args[@]}" "$dest" >/dev/null
 }
 
 # Resolve a channel pointer to a version string. Echoes "<version>".
