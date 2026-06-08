@@ -40,7 +40,6 @@ jobs:
 
       - name: Install node deps
         run: npm ci
-        working-directory: packages/template
 
       - name: Publish release
         env:
