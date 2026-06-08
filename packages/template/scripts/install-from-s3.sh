@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# Bootstrap a fresh cloud computer into an installed agent.
+#
+# Pulled by the cloud computer with a one-liner:
+#   bash <(curl -fsSL $NUWAX_S3_ENDPOINT/$NUWAX_S3_BUCKET/agent-engines/deepagents-app/install-from-s3.sh) \
+#     --channel stable \
+#     --install-root /opt/nuwax/deepagents-template
+#
+# This script:
+#   1. Reads the channel pointer to find the current version.
+#   2. Downloads the matching install.sh and s3-fetch.sh to a temp dir.
+#   3. Execs install.sh --from-bucket with the same channel + install-root.
+#
+# Requires: aws cli, curl, bash, node, jq.
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: install-from-s3.sh [options]
+
+Options:
+  --channel <stable|beta>   Channel to resolve (default: stable)
+  --install-root DIR        Target install directory (default: /opt/nuwax/deepagents-template)
+  --no-verify-ssl           Pass through to `aws s3 cp`
+  --aws-endpoint <url>      Override NUWAX_S3_ENDPOINT for this invocation
+  --aws-bucket <name>       Override NUWAX_S3_BUCKET for this invocation
+  -h, --help                Show help
+
+Environment:
+  NUWAX_S3_ENDPOINT, NUWAX_S3_REGION, NUWAX_S3_BUCKET
+  NUWAX_S3_ACCESS_KEY_ID, NUWAX_S3_SECRET_ACCESS_KEY
+  Must be exported before running. The cloud computer (rcoder) is expected
+  to inject these at launch time.
+EOF
+}
+
+CHANNEL="stable"
+INSTALL_ROOT="/opt/nuwax/deepagents-template"
+NO_VERIFY_SSL=0
+AWS_ENDPOINT_OVERRIDE=""
+AWS_BUCKET_OVERRIDE=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --channel) CHANNEL="${2:-stable}"; shift 2 ;;
+    --install-root) INSTALL_ROOT="${2:-}"; shift 2 ;;
+    --no-verify-ssl) NO_VERIFY_SSL=1; shift ;;
+    --aws-endpoint) AWS_ENDPOINT_OVERRIDE="${2:-}"; shift 2 ;;
+    --aws-bucket) AWS_BUCKET_OVERRIDE="${2:-}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 1 ;;
+  esac
+done
+
+if [[ -n "$AWS_ENDPOINT_OVERRIDE" ]]; then
+  export NUWAX_S3_ENDPOINT="$AWS_ENDPOINT_OVERRIDE"
+fi
+if [[ -n "$AWS_BUCKET_OVERRIDE" ]]; then
+  export NUWAX_S3_BUCKET="$AWS_BUCKET_OVERRIDE"
+fi
+if [[ "$NO_VERIFY_SSL" -eq 1 ]]; then
+  export NUWAX_S3_NO_VERIFY_SSL=1
+fi
+
+: "${NUWAX_S3_ENDPOINT:?NUWAX_S3_ENDPOINT is required}"
+: "${NUWAX_S3_BUCKET:?NUWAX_S3_BUCKET is required}"
+
+ENGINE_PREFIX="agent-engines/deepagents-app"
+ENDPOINT_ARGS=(--endpoint-url "$NUWAX_S3_ENDPOINT")
+if [[ -n "${NUWAX_S3_REGION:-}" ]]; then
+  ENDPOINT_ARGS+=(--region "$NUWAX_S3_REGION")
+fi
+if [[ "${NUWAX_S3_NO_VERIFY_SSL:-0}" == "1" ]]; then
+  ENDPOINT_ARGS+=(--no-verify-ssl)
+fi
+
+echo "Resolving channel '$CHANNEL' from s3://$NUWAX_S3_BUCKET/$ENGINE_PREFIX/channels/$CHANNEL.json"
+POINTER=$(aws s3 cp "s3://$NUWAX_S3_BUCKET/$ENGINE_PREFIX/channels/$CHANNEL.json" - "${ENDPOINT_ARGS[@]}")
+VERSION=$(printf '%s' "$POINTER" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{process.stdout.write(JSON.parse(s).version||'')})")
+if [[ -z "$VERSION" ]]; then
+  echo "Channel pointer for '$CHANNEL' has no .version field" >&2
+  exit 1
+fi
+echo "Channel '$CHANNEL' → version $VERSION"
+
+TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/nuwax-agent-bootstrap-XXXXXX")
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+echo "Fetching s3-fetch.sh and install.sh for version $VERSION ..."
+aws s3 cp "s3://$NUWAX_S3_BUCKET/$ENGINE_PREFIX/versions/$VERSION/scripts/s3-fetch.sh" "$TMP_DIR/s3-fetch.sh" "${ENDPOINT_ARGS[@]}"
+aws s3 cp "s3://$NUWAX_S3_BUCKET/$ENGINE_PREFIX/versions/$VERSION/scripts/install.sh"   "$TMP_DIR/install.sh"   "${ENDPOINT_ARGS[@]}"
+chmod +x "$TMP_DIR/install.sh" "$TMP_DIR/s3-fetch.sh"
+
+echo "Handing off to install.sh --from-bucket"
+exec bash "$TMP_DIR/install.sh" --from-bucket --channel "$CHANNEL" --install-root "$INSTALL_ROOT"

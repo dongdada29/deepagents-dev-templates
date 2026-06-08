@@ -1,0 +1,46 @@
+name: release
+
+# Triggers on a push of any v*.*.* tag (stable or pre-release).
+# Runs scripts/release.sh which packages the agent and publishes
+# to the MinIO/S3 bucket declared in .nuwax-agent/distribution.json.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install aws-cli + node deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq awscli jq
+          npm ci
+
+      - name: Publish release
+        env:
+          # MinIO/S3 connection (all values are GitHub Actions secrets).
+          NUWAX_S3_ENDPOINT: ${{ secrets.NUWAX_S3_ENDPOINT }}
+          NUWAX_S3_REGION: ${{ secrets.NUWAX_S3_REGION }}
+          NUWAX_S3_BUCKET: ${{ secrets.NUWAX_S3_BUCKET }}
+          NUWAX_S3_ACCESS_KEY_ID: ${{ secrets.NUWAX_S3_ACCESS_KEY_ID }}
+          NUWAX_S3_SECRET_ACCESS_KEY: ${{ secrets.NUWAX_S3_SECRET_ACCESS_KEY }}
+          # publish-s3.sh maps NUWAX_S3_* to AWS_* before calling `aws s3 cp`.
+          AWS_ACCESS_KEY_ID: ${{ secrets.NUWAX_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.NUWAX_S3_SECRET_ACCESS_KEY }}
+        run: bash scripts/release.sh "${GITHUB_REF_NAME}"

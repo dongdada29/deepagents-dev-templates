@@ -4,16 +4,16 @@
   "description": "Declares how packaged agent artifacts, metadata, scripts, and manifests are published to a MinIO/S3 bucket so nuwaclaw engines can pull a given version on demand. The config is itself shipped to S3 under each version's manifests/ directory so consumers can introspect the layout.",
   "endpoint": {
     "type": "s3",
-    "url": "https://s3.nuwax.com",
+    "url": "https://s3.nuwax.com:9443",
     "region": "us-east-1",
     "forcePathStyle": true,
     "signatureVersion": "v4"
   },
-  "bucket": "nuwax-agent-registry",
+  "bucket": "nuwax-packages",
   "engineId": "deepagents-app",
   "packageName": "deepagents-dev-templates",
   "agentName": "deepagents-app-agent",
-  "prefix": "engines/deepagents-app",
+  "prefix": "agent-engines/deepagents-app",
   "versioning": {
     "versionSource": ["package.json", "agent-package.json"],
     "versionRegex": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?(?:-[0-9A-Za-z.-]+)?$",
@@ -57,7 +57,9 @@
       "scripts/package.sh",
       "scripts/validate-package.sh",
       "scripts/publish-s3.sh",
-      "scripts/release.sh"
+      "scripts/release.sh",
+      "scripts/s3-fetch.sh",
+      "scripts/install-from-s3.sh"
     ]
   },
   "manifests": {
@@ -90,14 +92,33 @@
     ]
   },
   "consume": {
-    "discoveryEndpoint": "engines/deepagents-app/latest.json",
+    "discoveryEndpoint": "agent-engines/deepagents-app/latest.json",
     "channelEndpoints": {
-      "stable": "engines/deepagents-app/channels/stable.json",
-      "beta": "engines/deepagents-app/channels/beta.json"
+      "stable": "agent-engines/deepagents-app/channels/stable.json",
+      "beta": "agent-engines/deepagents-app/channels/beta.json"
     },
-    "versionEndpointTemplate": "engines/deepagents-app/versions/{version}/metadata/.version.json",
-    "artifactBaseTemplate": "engines/deepagents-app/versions/{version}/artifacts/",
-    "scriptBaseTemplate": "engines/deepagents-app/versions/{version}/scripts/",
-    "manifestBaseTemplate": "engines/deepagents-app/versions/{version}/manifests/"
+    "versionEndpointTemplate": "agent-engines/deepagents-app/versions/{version}/metadata/.version.json",
+    "artifactBaseTemplate": "agent-engines/deepagents-app/versions/{version}/artifacts/",
+    "scriptBaseTemplate": "agent-engines/deepagents-app/versions/{version}/scripts/",
+    "manifestBaseTemplate": "agent-engines/deepagents-app/versions/{version}/manifests/"
+  },
+  "installer": {
+    "bootstrapKey": "agent-engines/deepagents-app/install-from-s3.sh",
+    "bootstrapUrlTemplate": "${NUWAX_S3_ENDPOINT}/${NUWAX_S3_BUCKET}/agent-engines/deepagents-app/install-from-s3.sh",
+    "resolveChannelTemplate": "${PREFIX}/channels/{channel}.json",
+    "checksumTemplate": "${PREFIX}/versions/{version}/metadata/package-checksums.json",
+    "artifactTemplate": "${PREFIX}/versions/{version}/artifacts/deepagents-dev-templates-{version}-{kind}",
+    "scriptTemplate": "${PREFIX}/versions/{version}/scripts/{name}",
+    "preferredArtifactKind": "nuwax-zip",
+    "loadEnvBeforeFetch": true,
+    "envFilePath": ".env",
+    "requiredEnvVars": [
+      "NUWAX_S3_ENDPOINT",
+      "NUWAX_S3_BUCKET"
+    ],
+    "requiredEnvVarsForLocalDev": [
+      "NUWAX_S3_ACCESS_KEY_ID",
+      "NUWAX_S3_SECRET_ACCESS_KEY"
+    ]
   }
 }

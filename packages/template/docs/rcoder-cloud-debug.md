@@ -21,7 +21,27 @@ dist-packages/deepagents-dev-templates-<version>.platform.json
 dist-packages/package-checksums.json
 ```
 
+## 从 S3 一键安装
+
+云端电脑（rcoder）通常没有 git checkout，制品都在 MinIO / S3 桶里。`install-from-s3.sh` 引导器会自己拉 channel pointer + install.sh，跑通"零样本起跑"：
+
+```bash
+# 由 nuwax 平台在 rcoder 启动时注入（或操作员 export）
+export NUWAX_S3_ENDPOINT=https://s3.nuwax.com:9443
+export NUWAX_S3_BUCKET=nuwax-packages
+export NUWAX_S3_ACCESS_KEY_ID=...            # 来自 nuwax 平台 / .env
+export NUWAX_S3_SECRET_ACCESS_KEY=...
+
+bash <(curl -fsSL $NUWAX_S3_ENDPOINT/$NUWAX_S3_BUCKET/agent-engines/deepagents-app/install-from-s3.sh) \
+  --channel stable \
+  --install-root /opt/nuwax/deepagents-template
+```
+
+上面 4 个变量名是 GitHub Actions secrets 的 key，真实值不会出现在文档里。
+
 ## 安装
+
+### 从本地制品
 
 ```bash
 bash scripts/install.sh \
@@ -36,15 +56,40 @@ bash scripts/install.sh \
 Using bundled node_modules; skipping npm install.
 ```
 
+### 从 S3 桶
+
+```bash
+bash scripts/install.sh \
+  --from-bucket \
+  --channel stable \
+  --install-root /opt/nuwax/deepagents-template \
+  --force
+```
+
+`install.sh` 自动 source `s3-fetch.sh` + 加载 `.env`（如存在），从 `agent-engines/deepagents-app/channels/stable.json` 解析当前 version，下载 `nuwax-zip` 并校验 sha256，再走原生安装流程。
+
+凭证注入（与"从 S3 一键安装"相同）：`NUWAX_S3_*` 这 4 个 env 变量。
+
 ## 升级
 
 `scripts/upgrade.sh` 会在保留用户数据的前提下，把当前安装原地替换为新版本制品；如果升级过程中出问题，可以再跑一次 `--rollback` 回到上一个版本。
 
+### 从 S3 桶
+
 ```bash
+# 升到当前 stable
 bash scripts/upgrade.sh \
-  --artifact dist-packages/deepagents-dev-templates-<new-version>-nuwax.zip \
+  --from-bucket \
+  --install-root /opt/nuwax/deepagents-template
+
+# 切到 beta 通道
+bash scripts/upgrade.sh \
+  --from-bucket \
+  --channel beta \
   --install-root /opt/nuwax/deepagents-template
 ```
+
+`upgrade.sh --from-bucket` 读 `$INSTALL_ROOT/.nuwax-agent/install-state.json` 拿当前版本，**目标版本 == 当前版本时直接拒绝**（exit 0 + 提示）。
 
 升级时默认会保留以下内容（写入新版本安装目录）：
 
@@ -71,6 +116,8 @@ bash scripts/upgrade.sh \
   --rollback \
   --install-root /opt/nuwax/deepagents-template
 ```
+
+> 回滚不需要 `--from-bucket`，因为上一版本的备份已经写在本地 `.nuwax-agent-backups/`，S3 不参与。
 
 回滚逻辑：
 

@@ -9,10 +9,12 @@
 #   - Uploads artifacts, metadata, scripts, and manifests under
 #       engines/<engineId>/versions/<version>/
 #   - Rewrites the matching channels/<channel>.json pointer and latest.json.
+#   - Overwrites agent-engines/deepagents-app/install-from-s3.sh so the
+#     bootstrap URL always points to the current stable install script.
 #
 # Environment overrides:
 #   NUWAX_S3_ENDPOINT, NUWAX_S3_REGION, NUWAX_S3_BUCKET
-#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY  (or a pre-configured profile)
+#   NUWAX_S3_ACCESS_KEY_ID, NUWAX_S3_SECRET_ACCESS_KEY  (or a pre-configured profile)
 #
 # Requires: aws cli, jq, git.
 set -euo pipefail
@@ -75,6 +77,17 @@ require_cmd aws
 require_cmd jq
 require_cmd git
 require_cmd node
+
+# CI runs publish-s3.sh from GitHub Actions where secrets are already in
+# process.env. We do NOT load .env here; credentials must come from the
+# calling environment (workflow env / manual export). Map project-prefixed
+# env vars to AWS_* so secrets can be named either way.
+if [[ -z "${AWS_ACCESS_KEY_ID:-}" && -n "${NUWAX_S3_ACCESS_KEY_ID:-}" ]]; then
+  export AWS_ACCESS_KEY_ID="$NUWAX_S3_ACCESS_KEY_ID"
+fi
+if [[ -z "${AWS_SECRET_ACCESS_KEY:-}" && -n "${NUWAX_S3_SECRET_ACCESS_KEY:-}" ]]; then
+  export AWS_SECRET_ACCESS_KEY="$NUWAX_S3_SECRET_ACCESS_KEY"
+fi
 
 if [[ ! -f "$DIST_CONFIG" ]]; then
   echo "Distribution config not found: $DIST_CONFIG" >&2
@@ -181,6 +194,8 @@ SCRIPT_FILES=(
   "scripts/validate-package.sh"
   "scripts/publish-s3.sh"
   "scripts/release.sh"
+  "scripts/s3-fetch.sh"
+  "scripts/install-from-s3.sh"
 )
 MANIFEST_FILES=(
   "agent-package.json"
@@ -340,9 +355,28 @@ NODE
   fi
 fi
 
+# ─── Overwrite bootstrap (install-from-s3.sh) ─────────────
+# Always overwrite the canonical bootstrap URL with the current stable
+# install-from-s3.sh so the one-liner on a fresh cloud computer always works.
+# We do this regardless of channel so the bootstrap script itself is the
+# single source of truth at the well-known key.
+echo
+echo "→ bootstrap (install-from-s3.sh)"
+BOOTSTRAP_KEY="$PREFIX/install-from-s3.sh"
+if [[ -f "$PKG_DIR/scripts/install-from-s3.sh" ]]; then
+  run_aws s3 cp "$PKG_DIR/scripts/install-from-s3.sh" "s3://$BUCKET/$BOOTSTRAP_KEY" \
+    --endpoint-url "$ENDPOINT" --region "$REGION" \
+    --cache-control "public, max-age=60, must-revalidate" \
+    --content-type "text/x-shellscript" >/dev/null
+  echo "  put install-from-s3.sh → s3://$BUCKET/$BOOTSTRAP_KEY"
+else
+  echo "  skip install-from-s3.sh (not present locally; bootstrap will not work until added)"
+fi
+
 echo
 echo "Publish complete: $ENGINE_ID $VERSION on $CHANNEL"
 echo "Discovery endpoints:"
 echo "  latest:        $ENDPOINT/$BUCKET/$LATEST_KEY"
 echo "  $CHANNEL:      $ENDPOINT/$BUCKET/$CHANNEL_KEY"
 echo "  version:       $ENDPOINT/$BUCKET/$PREFIX/$VERSION_JSON_REL"
+echo "  bootstrap:     $ENDPOINT/$BUCKET/$BOOTSTRAP_KEY"

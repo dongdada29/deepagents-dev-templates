@@ -182,6 +182,14 @@ Schema:
 
 ## Install
 
+### From local artifact
+
+```bash
+bash scripts/install.sh \
+  --artifact dist-packages/deepagents-dev-templates-<version>-nuwax.zip \
+  --install-root /opt/nuwax/deepagents-template
+```
+
 Install layout:
 
 ```text
@@ -218,26 +226,76 @@ Install state:
 }
 ```
 
-## Upgrade
-
-Upgrade flow:
-
-1. Read `install-state.json`.
-2. Validate new artifact checksum.
-3. Extract into a new version directory without touching the old version.
-4. Run `npm install --omit=dev`.
-5. Keep shared configuration; do not copy real secrets.
-6. Run smoke tests.
-7. Switch `current` or `current.json` only after smoke tests pass.
-8. Keep the latest two versions by default.
-9. If smoke tests fail, do not switch current.
-
-Commands:
+### From S3 bucket
 
 ```bash
-bash scripts/upgrade.sh --artifact <artifact> --install-root <path>
-bash scripts/upgrade.sh --rollback --install-root <path>
+bash scripts/install.sh \
+  --from-bucket \
+  --channel stable \
+  --install-root /opt/nuwax/deepagents-template
 ```
+
+S3 模式：
+
+- 自动 source `scripts/s3-fetch.sh`，加载 `.env`（如存在）。
+- 拉 `agent-engines/deepagents-app/channels/<channel>.json` 拿 version。
+- 拉 `versions/<v>/artifacts/deepagents-dev-templates-<v>-nuwax.zip`，校验 sha256 后走本地安装流程。
+- 与 `--artifact <本地>` 互斥。
+
+**云端电脑一行起跑**（不走 git clone）：
+
+```bash
+bash <(curl -fsSL https://s3.nuwax.com:9443/nuwax-packages/agent-engines/deepagents-app/install-from-s3.sh) \
+  --channel stable \
+  --install-root /opt/nuwax/deepagents-template
+```
+
+凭证 `NUWAX_S3_*` 需提前 export（`install-from-s3.sh` 引导器会校验）。详细桶布局 / 凭证模型见 [Distribution via MinIO/S3](./distribution-s3.md)。
+
+## Upgrade
+
+### From local artifact
+
+```bash
+bash scripts/upgrade.sh \
+  --artifact dist-packages/deepagents-dev-templates-<new-version>-nuwax.zip \
+  --install-root /opt/nuwax/deepagents-template
+```
+
+### From S3 bucket
+
+```bash
+# 升到当前 stable
+bash scripts/upgrade.sh --from-bucket --install-root /opt/nuwax/deepagents-template
+
+# 切到 beta 通道
+bash scripts/upgrade.sh --from-bucket --channel beta --install-root /opt/nuwax/deepagents-template
+
+# 显式指定目标版本
+bash scripts/upgrade.sh --from-bucket --target-version 0.3.0-rc.1 \
+  --install-root /opt/nuwax/deepagents-template
+```
+
+S3 模式：
+
+- 读 `$INSTALL_ROOT/.nuwax-agent/install-state.json` 拿 current version。
+- 解析 target version（`--target-version` 优先，否则 `s3_resolve_version`）。
+- `current == target` 直接拒绝并提示（避免无意义重装；如需重装请用 `--target-version` 显式不同版本）。
+- 拉新 artifact + 校验 sha256 + preserve user data + swap 目录。
+
+### Rollback
+
+```bash
+# 从 S3 拉到的版本升级失败
+bash scripts/upgrade.sh --rollback --install-root /opt/nuwax/deepagents-template
+```
+
+回滚逻辑：
+
+- 读 `.nuwax-agent/upgrade-state.json` 的 `backupPath`。
+- 把当前（坏掉的）目录改名为 `INSTALL_ROOT.failed-YYYYMMDDHHMMSS`。
+- 拷贝 `backupPath` 回 `INSTALL_ROOT`。
+- 不需要再传 `--artifact` / `--from-bucket`。
 
 ## Uninstall
 

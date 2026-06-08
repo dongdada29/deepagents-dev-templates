@@ -3,11 +3,32 @@
   "schemaVersion": "nuwax.agent.lifecycle.v1",
   "packageId": "deepagents-template",
   "install": {
+    "modes": {
+      "local": "Install from a local artifact (--artifact <path>)",
+      "fromBucket": "Resolve the version from the MinIO/S3 bucket via the channel pointer (--from-bucket)"
+    },
     "steps": [
       {
         "id": "verify-runtime",
         "type": "check",
         "command": "node --version"
+      },
+      {
+        "id": "fetch-from-s3",
+        "type": "s3-download",
+        "condition": "fromBucket == true",
+        "channel": "${CHANNEL}",
+        "endpoint": "${NUWAX_S3_ENDPOINT}",
+        "bucket": "${NUWAX_S3_BUCKET}",
+        "prefix": "${PREFIX}",
+        "outputArtifact": "${INSTALL_TMP}/${ARTIFACT_FILE}"
+      },
+      {
+        "id": "verify-checksum",
+        "type": "sha256-verify",
+        "condition": "fromBucket == true",
+        "checksumsPath": "${INSTALL_TMP}/package-checksums.json",
+        "artifact": "${INSTALL_TMP}/${ARTIFACT_FILE}"
       },
       {
         "id": "materialize-placeholders",
@@ -28,6 +49,10 @@
   },
   "upgrade": {
     "strategy": "preserve-user-config",
+    "modes": {
+      "local": "Upgrade using a local artifact (--artifact <path>)",
+      "fromBucket": "Pull the next version from the MinIO/S3 bucket via the channel pointer (--from-bucket)"
+    },
     "preserve": [
       "config/*.local.json",
       ".env",
@@ -35,6 +60,31 @@
       "skills/platform/**"
     ],
     "steps": [
+      {
+        "id": "fetch-from-s3",
+        "type": "s3-download",
+        "condition": "fromBucket == true",
+        "channel": "${CHANNEL}",
+        "endpoint": "${NUWAX_S3_ENDPOINT}",
+        "bucket": "${NUWAX_S3_BUCKET}",
+        "prefix": "${PREFIX}",
+        "outputArtifact": "${UPGRADE_TMP}/${ARTIFACT_FILE}"
+      },
+      {
+        "id": "verify-checksum",
+        "type": "sha256-verify",
+        "condition": "fromBucket == true",
+        "checksumsPath": "${UPGRADE_TMP}/package-checksums.json",
+        "artifact": "${UPGRADE_TMP}/${ARTIFACT_FILE}"
+      },
+      {
+        "id": "compare-versions",
+        "type": "version-compare",
+        "condition": "fromBucket == true",
+        "currentPath": "${INSTALL_ROOT}/.nuwax-agent/install-state.json",
+        "targetVersion": "${TARGET_VERSION}",
+        "onSameVersion": "skip-with-message"
+      },
       {
         "id": "backup-current",
         "type": "backup",

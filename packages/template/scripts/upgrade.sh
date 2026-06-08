@@ -5,18 +5,32 @@ set -euo pipefail
 ARTIFACT=""
 INSTALL_ROOT=""
 ROLLBACK=0
+FROM_BUCKET=0
+CHANNEL="stable"
+TARGET_VERSION=""
+NO_VERIFY_SSL=0
+AWS_ENDPOINT_OVERRIDE=""
+AWS_BUCKET_OVERRIDE=""
 
 usage() {
   cat <<'EOF'
 Usage:
   bash scripts/upgrade.sh --artifact PATH --install-root DIR
   bash scripts/upgrade.sh --rollback --install-root DIR
+  bash scripts/upgrade.sh --from-bucket --install-root DIR [--channel stable|beta | --target-version X.Y.Z]
 
 Options:
-  --artifact PATH      New npm tgz, Nuwax tar.gz, or Nuwax zip artifact
-  --install-root DIR   Existing install directory
-  --rollback           Restore the last backup recorded by upgrade
-  -h, --help           Show help
+  --artifact PATH           New npm tgz, Nuwax tar.gz, or Nuwax zip artifact
+  --install-root DIR        Existing install directory
+  --rollback                Restore the last backup recorded by upgrade
+  --from-bucket             Pull the new artifact from the MinIO/S3 bucket declared in
+                            .nuwax-agent/distribution.json (implies --channel stable)
+  --channel <stable|beta>   Channel to resolve when --from-bucket is set (default: stable)
+  --target-version <v>      Explicit target version (overrides --channel resolution)
+  --no-verify-ssl           Pass through to `aws s3 cp` for self-signed MinIO endpoints
+  --aws-endpoint <url>      Override NUWAX_S3_ENDPOINT for this invocation
+  --aws-bucket <name>       Override NUWAX_S3_BUCKET for this invocation
+  -h, --help                Show help
 EOF
 }
 
@@ -34,6 +48,30 @@ while [[ $# -gt 0 ]]; do
       ROLLBACK=1
       shift
       ;;
+    --from-bucket)
+      FROM_BUCKET=1
+      shift
+      ;;
+    --channel)
+      CHANNEL="${2:-stable}"
+      shift 2
+      ;;
+    --target-version)
+      TARGET_VERSION="${2:-}"
+      shift 2
+      ;;
+    --no-verify-ssl)
+      NO_VERIFY_SSL=1
+      shift
+      ;;
+    --aws-endpoint)
+      AWS_ENDPOINT_OVERRIDE="${2:-}"
+      shift 2
+      ;;
+    --aws-bucket)
+      AWS_BUCKET_OVERRIDE="${2:-}"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -45,6 +83,21 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$FROM_BUCKET" -eq 1 && -n "$ARTIFACT" ]]; then
+  echo "--from-bucket and --artifact are mutually exclusive" >&2
+  exit 1
+fi
+
+if [[ -n "$AWS_ENDPOINT_OVERRIDE" ]]; then
+  export NUWAX_S3_ENDPOINT="$AWS_ENDPOINT_OVERRIDE"
+fi
+if [[ -n "$AWS_BUCKET_OVERRIDE" ]]; then
+  export NUWAX_S3_BUCKET="$AWS_BUCKET_OVERRIDE"
+fi
+if [[ "$NO_VERIFY_SSL" -eq 1 ]]; then
+  export NUWAX_S3_NO_VERIFY_SSL=1
+fi
 
 if [[ -z "$INSTALL_ROOT" ]]; then
   echo "--install-root is required" >&2
@@ -78,8 +131,49 @@ if [[ "$ROLLBACK" -eq 1 ]]; then
   exit 0
 fi
 
+if [[ "$FROM_BUCKET" -eq 1 ]]; then
+  if [[ ! -d "$INSTALL_ROOT" ]]; then
+    echo "Install root not found: $INSTALL_ROOT" >&2
+    echo "Use scripts/install.sh --from-bucket for a fresh install instead." >&2
+    exit 1
+  fi
+
+  # shellcheck source=scripts/s3-fetch.sh
+  source "$(dirname "$0")/s3-fetch.sh"
+  s3_load_env
+
+  if [[ -n "$TARGET_VERSION" ]]; then
+    TARGET_VERSION=$(s3_resolve_version "$CHANNEL" >/dev/null 2>&1 || true; echo "$TARGET_VERSION")
+    # If the user passed an explicit version that already matches the channel
+    # pointer, that's fine; we just trust what they typed.
+  else
+    TARGET_VERSION=$(s3_resolve_version "$CHANNEL")
+  fi
+  echo "Target version (channel=$CHANNEL): $TARGET_VERSION"
+
+  INSTALL_STATE="$INSTALL_ROOT/.nuwax-agent/install-state.json"
+  if [[ -f "$INSTALL_STATE" ]]; then
+    CURRENT_VERSION=$(node -p "require('$INSTALL_STATE').version // 'unknown'")
+    if [[ "$CURRENT_VERSION" == "$TARGET_VERSION" ]]; then
+      echo "Already at version $CURRENT_VERSION; nothing to do." >&2
+      echo "Use --target-version to force a reinstall, or pass --channel beta to switch channels." >&2
+      exit 0
+    fi
+    echo "Current version: $CURRENT_VERSION → $TARGET_VERSION"
+  else
+    echo "No install-state.json at $INSTALL_STATE; cannot compare versions." >&2
+    echo "Use scripts/install.sh --from-bucket for a fresh install instead." >&2
+    exit 1
+  fi
+
+  TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/nuwax-agent-upgrade-XXXXXX")
+  trap 'rm -rf "$TMP_DIR"' EXIT
+  ARTIFACT=$(s3_fetch_artifact "$CHANNEL" "nuwax-zip" "$TMP_DIR")
+  echo "Downloaded: $ARTIFACT"
+fi
+
 if [[ -z "$ARTIFACT" ]]; then
-  echo "--artifact is required unless --rollback is used" >&2
+  echo "--artifact is required unless --rollback or --from-bucket is used" >&2
   exit 1
 fi
 
