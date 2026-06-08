@@ -61,11 +61,11 @@ s3_bucket() {
 }
 
 s3_prefix() {
-  printf '%s' "${NUWAX_S3_PREFIX:-$(node -p "require('$S3_FETCH_DIST_CONFIG').prefix" 2>/dev/null || echo 'agent-engines/deepagents-app')}"
+  printf '%s' "${NUWAX_S3_PREFIX:-agent-engines/deepagents-app}"
 }
 
 s3_engine_id() {
-  printf '%s' "${NUWAX_S3_ENGINE_ID:-$(node -p "require('$S3_FETCH_DIST_CONFIG').engineId" 2>/dev/null || echo 'deepagents-app')}"
+  printf '%s' "${NUWAX_S3_ENGINE_ID:-deepagents-app}"
 }
 
 # Resolve a channel pointer to a version string. Echoes "<version>".

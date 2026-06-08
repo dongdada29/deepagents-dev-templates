@@ -67,7 +67,8 @@ fi
 : "${NUWAX_S3_BUCKET:=nuwax-packages}"
 : "${NUWAX_S3_PREFIX:=agent-engines/deepagents-app}"
 : "${NUWAX_S3_ENGINE_ID:=deepagents-app}"
-export NUWAX_S3_ENDPOINT NUWAX_S3_BUCKET NUWAX_S3_PREFIX NUWAX_S3_ENGINE_ID
+: "${NUWAX_S3_REGION:=us-east-1}"
+export NUWAX_S3_ENDPOINT NUWAX_S3_BUCKET NUWAX_S3_PREFIX NUWAX_S3_ENGINE_ID NUWAX_S3_REGION
 
 ENGINE_PREFIX="agent-engines/deepagents-app"
 ENDPOINT_ARGS=(--endpoint-url "$NUWAX_S3_ENDPOINT" --no-sign-request)
