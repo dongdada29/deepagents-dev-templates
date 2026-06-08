@@ -86,10 +86,16 @@ echo "Channel '$CHANNEL' → version $VERSION"
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/nuwax-agent-bootstrap-XXXXXX")
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-echo "Fetching s3-fetch.sh and install.sh for version $VERSION ..."
+echo "Fetching s3-fetch.sh, install.sh and upgrade.sh for version $VERSION ..."
 aws s3 cp "s3://$NUWAX_S3_BUCKET/$ENGINE_PREFIX/versions/$VERSION/scripts/s3-fetch.sh" "$TMP_DIR/s3-fetch.sh" "${ENDPOINT_ARGS[@]}"
 aws s3 cp "s3://$NUWAX_S3_BUCKET/$ENGINE_PREFIX/versions/$VERSION/scripts/install.sh"   "$TMP_DIR/install.sh"   "${ENDPOINT_ARGS[@]}"
-chmod +x "$TMP_DIR/install.sh" "$TMP_DIR/s3-fetch.sh"
+aws s3 cp "s3://$NUWAX_S3_BUCKET/$ENGINE_PREFIX/versions/$VERSION/scripts/upgrade.sh"   "$TMP_DIR/upgrade.sh"   "${ENDPOINT_ARGS[@]}"
+chmod +x "$TMP_DIR/install.sh" "$TMP_DIR/s3-fetch.sh" "$TMP_DIR/upgrade.sh"
 
-echo "Handing off to install.sh --from-bucket"
-exec bash "$TMP_DIR/install.sh" --from-bucket --channel "$CHANNEL" --install-root "$INSTALL_ROOT"
+if [[ -d "$INSTALL_ROOT" && -f "$INSTALL_ROOT/dist/index.js" ]]; then
+  echo "Existing install detected at $INSTALL_ROOT — switching to upgrade mode"
+  exec bash "$TMP_DIR/upgrade.sh" --from-bucket --channel "$CHANNEL" --install-root "$INSTALL_ROOT"
+else
+  echo "No existing install — running fresh install"
+  exec bash "$TMP_DIR/install.sh" --from-bucket --channel "$CHANNEL" --install-root "$INSTALL_ROOT"
+fi
