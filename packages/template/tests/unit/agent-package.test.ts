@@ -20,10 +20,10 @@ describe("agent package manifests", () => {
 
     expect(manifest.engine).toBe("deepagents-app");
     expect(manifest.source).toMatchObject({
-      type: "npm",
-      package: "deepagents-dev-templates",
+      type: "s3",
+      bucket: "nuwax-packages",
     });
-    expect(manifest.alternativeSources.map((source) => source.type)).toEqual(["tgz", "git"]);
+    expect(manifest.alternativeSources.map((source) => source.type)).toEqual(["npm", "tgz", "git", "s3-channel"]);
     expect(manifest.bin).toEqual({
       start: "dist/index.js",
       graph: "dist/index.js graph",
