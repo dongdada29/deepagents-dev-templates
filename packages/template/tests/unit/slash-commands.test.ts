@@ -90,4 +90,20 @@ describe("slash-commands", () => {
     expect(result?.text).toContain("yolo, plan, ask");
     expect(process.env.DEEPAGENTS_PERMISSIONS_MODE).toBeUndefined();
   });
+
+  it("does not treat absolute filesystem paths as slash commands", () => {
+    const macPath = "/Users/apple/workspace/deepagents-dev-templates/examples/thesis-ppt/src";
+    const linuxPath = "/home/dev/project/src";
+    const spacedPath = "/Users/apple/foo bar/baz";
+
+    expect(executeSlashCommand(macPath, baseCtx(workspaceRoot))).toBeNull();
+    expect(executeSlashCommand(linuxPath, baseCtx(workspaceRoot))).toBeNull();
+    expect(executeSlashCommand(spacedPath, baseCtx(workspaceRoot))).toBeNull();
+  });
+
+  it("still recognizes real slash commands after path guard", () => {
+    expect(executeSlashCommand("/help", baseCtx(workspaceRoot))?.kind).toBe("handled");
+    expect(executeSlashCommand("/config", baseCtx(workspaceRoot))?.kind).toBe("handled");
+    expect(executeSlashCommand("/session sess_target", baseCtx(workspaceRoot))?.kind).toBe("handled");
+  });
 });
