@@ -53,10 +53,6 @@ s3_endpoint_args() {
   if [[ "${NUWAX_S3_NO_VERIFY_SSL:-0}" == "1" ]]; then
     printf -- ' --no-verify-ssl'
   fi
-  # MinIO returns x-amz-checksum-crc32 headers that AWS CLI v2 validates; the
-  # stored value can differ from the actual content, so disable client-side
-  # checksum validation for all download operations.
-  printf -- ' --no-checksum-validation'
 }
 
 s3_bucket() {
@@ -106,7 +102,7 @@ s3_fetch_checksums() {
   prefix=$(s3_prefix)
   mkdir -p "$dest_dir"
   aws s3 cp "s3://${bucket}/${prefix}/versions/${version}/metadata/package-checksums.json" \
-    "$dest_dir/package-checksums.json" $(s3_endpoint_args) >/dev/null
+    "$dest_dir/package-checksums.json" $(s3_endpoint_args) --no-checksum-validation >/dev/null
   printf '%s/package-checksums.json' "$dest_dir"
 }
 
@@ -170,7 +166,7 @@ s3_fetch_artifact_at_version() {
   local dest="$dest_dir/$file"
 
   echo "→ fetching s3://${bucket}/${prefix}/versions/${version}/artifacts/${file}"
-  aws s3 cp "s3://${bucket}/${prefix}/versions/${version}/artifacts/${file}" "$dest" $(s3_endpoint_args)
+  aws s3 cp "s3://${bucket}/${prefix}/versions/${version}/artifacts/${file}" "$dest" $(s3_endpoint_args) --no-checksum-validation
 
   local checksums
   checksums=$(s3_fetch_checksums "$version" "$dest_dir") || return 1
@@ -189,7 +185,7 @@ s3_fetch_script() {
   bucket=$(s3_bucket)
   prefix=$(s3_prefix)
   mkdir -p "$(dirname "$dest")"
-  aws s3 cp "s3://${bucket}/${prefix}/versions/${version}/scripts/${name}" "$dest" $(s3_endpoint_args)
+  aws s3 cp "s3://${bucket}/${prefix}/versions/${version}/scripts/${name}" "$dest" $(s3_endpoint_args) --no-checksum-validation
   chmod +x "$dest" 2>/dev/null || true
   printf '%s' "$dest"
 }
