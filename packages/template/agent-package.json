@@ -1,35 +1,33 @@
 {
   "name": "deepagents-app-agent",
-  "version": "0.2.2-beta.1",
+  "version": "0.2.2-beta.2",
   "description": "AI application agent built with DeepAgents + ACP",
   "engine": "deepagents-app",
-
   "source": {
     "type": "s3",
     "endpoint": "https://s3.nuwax.com:9443",
     "bucket": "nuwax-packages",
     "region": "us-east-1",
-    "prefix": "agent-engines/deepagents-app/versions/0.2.2-beta.1",
-    "version": "0.2.2-beta.1",
+    "prefix": "agent-engines/deepagents-app/versions/0.2.2-beta.2",
+    "version": "0.2.2-beta.2",
     "forcePathStyle": true
   },
-
   "alternativeSources": [
     {
       "type": "npm",
       "package": "deepagents-dev-templates",
       "registry": "https://registry.npmjs.org",
-      "version": "0.2.2-beta.1"
+      "version": "0.2.2-beta.2"
     },
     {
       "type": "tgz",
       "path": "./deepagents-dev-templates-0.2.2-beta.1.tgz",
-      "version": "0.2.2-beta.1"
+      "version": "0.2.2-beta.2"
     },
     {
       "type": "git",
       "url": "https://github.com/nuwax-ai/deepagents-dev-templates.git",
-      "ref": "v0.2.2-beta.1"
+      "ref": "v0.2.2-beta.2"
     },
     {
       "type": "s3-channel",
@@ -39,18 +37,15 @@
       "pointerPath": "engines/deepagents-app/channels/stable.json"
     }
   ],
-
   "bin": {
     "start": "dist/index.js",
     "graph": "dist/index.js graph"
   },
-
   "graph": {
     "schema": "nuwaclaw.agent-code-graph.v1",
     "command": "node dist/index.js graph",
     "description": "Generates the code node relationship graph for nuwaclaw UI rendering."
   },
-
   "env": {
     "required": [],
     "optional": [
@@ -65,29 +60,31 @@
       "ACP_SESSION_CONFIG_JSON"
     ],
     "oneOfRequired": [
-      ["ANTHROPIC_API_KEY"],
-      ["ANTHROPIC_AUTH_TOKEN"],
-      ["OPENAI_API_KEY"]
+      [
+        "ANTHROPIC_API_KEY"
+      ],
+      [
+        "ANTHROPIC_AUTH_TOKEN"
+      ],
+      [
+        "OPENAI_API_KEY"
+      ]
     ]
   },
-
   "mcp": {
     "servers": [
       "context7"
     ]
   },
-
   "platform": {
     "agentId": "",
     "spaceId": "",
     "apiBaseUrl": "https://api.nuwax.com"
   },
-
   "checksum": {
     "algorithm": "sha256",
     "value": ""
   },
-
   "metadata": {
     "templateVersion": "1.0.0",
     "framework": "deepagents-js",

@@ -3,7 +3,7 @@
   "agent": {
     "name": "my-scenario-agent",
     "description": "AI agent for [specific scenario]",
-    "version": "0.2.2-beta.1",
+    "version": "0.2.2-beta.2",
     "outputStyle": "concise"
   },
   "model": {
@@ -25,15 +25,31 @@
   },
   "permissions": {
     "mode": "ask",
-    "interruptOn": ["write_file", "edit_file", "execute"],
-    "allowedPaths": ["src/app/", "prompts/", "skills/", "config/"],
-    "deniedPaths": ["src/runtime/"]
+    "interruptOn": [
+      "write_file",
+      "edit_file",
+      "execute"
+    ],
+    "allowedPaths": [
+      "src/app/",
+      "prompts/",
+      "skills/",
+      "config/"
+    ],
+    "deniedPaths": [
+      "src/runtime/"
+    ]
   },
   "skills": {
-    "directories": ["./skills/builtin/", "./skills/platform/"],
+    "directories": [
+      "./skills/builtin/",
+      "./skills/platform/"
+    ],
     "progressiveLoading": true
   },
-  "agentsDirectories": ["./.agents"],
+  "agentsDirectories": [
+    "./.agents"
+  ],
   "memory": {
     "enabled": true,
     "dir": "./.agent-memory",
