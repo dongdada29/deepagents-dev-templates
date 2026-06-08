@@ -8,16 +8,15 @@
 #   s3_fetch_artifact <channel> <kind> <dest_dir>
 #   s3_fetch_script <version> <script_name> <dest>
 #
-# Reads layout from .nuwax-agent/distribution.json. Honors env overrides:
-#   NUWAX_S3_ENDPOINT, NUWAX_S3_REGION, NUWAX_S3_BUCKET
+# All S3 coordinates default to the public nuwax-packages bucket; override via env vars:
+#   NUWAX_S3_ENDPOINT, NUWAX_S3_REGION, NUWAX_S3_BUCKET, NUWAX_S3_PREFIX, NUWAX_S3_ENGINE_ID
 #   NUWAX_S3_ACCESS_KEY_ID, NUWAX_S3_SECRET_ACCESS_KEY, NUWAX_S3_NO_VERIFY_SSL
 #
-# Requires: aws cli, jq, node.
+# Requires: aws cli, node.
 set -euo pipefail
 
 S3_FETCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 S3_FETCH_PKG_DIR="$(dirname "$S3_FETCH_DIR")"
-S3_FETCH_DIST_CONFIG="$S3_FETCH_PKG_DIR/.nuwax-agent/distribution.json"
 
 # Map project env vars to AWS_* if AWS_* is not already set (CI takes precedence).
 s3_apply_aws_env() {
@@ -41,11 +40,11 @@ s3_load_env() {
   s3_apply_aws_env
 }
 
-# Read the bucket + prefix from distribution.json with env-var precedence.
+# Build endpoint args using env vars; hardcoded defaults match distribution.json.
 s3_endpoint_args() {
   local endpoint region
-  endpoint=${NUWAX_S3_ENDPOINT:-$(node -p "require('$S3_FETCH_DIST_CONFIG').endpoint.url")}
-  region=${NUWAX_S3_REGION:-$(node -p "require('$S3_FETCH_DIST_CONFIG').endpoint.region")}
+  endpoint=${NUWAX_S3_ENDPOINT:-https://s3.nuwax.com:9443}
+  region=${NUWAX_S3_REGION:-us-east-1}
   printf -- '--endpoint-url %s --region %s' "$endpoint" "$region"
   # No-sign-request for public buckets; skip if credentials are set for faster rate limits.
   if [[ -z "${NUWAX_S3_ACCESS_KEY_ID:-}" && -z "${AWS_ACCESS_KEY_ID:-}" ]]; then
@@ -57,7 +56,7 @@ s3_endpoint_args() {
 }
 
 s3_bucket() {
-  printf '%s' "${NUWAX_S3_BUCKET:-$(node -p "require('$S3_FETCH_DIST_CONFIG').bucket")}"
+  printf '%s' "${NUWAX_S3_BUCKET:-nuwax-packages}"
 }
 
 s3_prefix() {
