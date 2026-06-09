@@ -1,13 +1,17 @@
 import { createReadStream, existsSync } from "node:fs";
-import { createServer, type Server } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, normalize, resolve, sep } from "node:path";
+import { inspectAgent } from "./inspector.js";
+import type { TemplateRuntime } from "./template-runtime.js";
 import type { AgentOrchestrationSpec } from "./types.js";
+import { applyEdits, previewEdits, type EditPayload } from "./editing/writer.js";
 
 export interface InspectServerOptions {
   spec: AgentOrchestrationSpec;
   port?: number;
   portRangeEnd?: number;
   staticDir: string;
+  editing?: { runtime: TemplateRuntime; workspaceRoot: string; configPath: string };
 }
 
 export interface InspectServerHandle {
@@ -23,7 +27,7 @@ export async function startInspectServer(options: InspectServerOptions): Promise
 
   for (let port = startPort; port <= portRangeEnd; port += 1) {
     try {
-      const server = createInspectHttpServer(options.spec, options.staticDir);
+      const server = createInspectHttpServer(options.spec, options.staticDir, options.editing);
       await listen(server, port);
       return {
         url: `http://localhost:${port}`,
@@ -41,17 +45,60 @@ export async function startInspectServer(options: InspectServerOptions): Promise
   throw new Error(`No available port in range ${startPort}-${portRangeEnd}: ${errorMessage(lastError)}`);
 }
 
-function createInspectHttpServer(spec: AgentOrchestrationSpec, staticDir: string): Server {
+function createInspectHttpServer(
+  spec: AgentOrchestrationSpec,
+  staticDir: string,
+  editing?: { runtime: TemplateRuntime; workspaceRoot: string; configPath: string }
+): Server {
   const root = resolve(staticDir);
   return createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://localhost");
+
     if (url.pathname === "/api/spec") {
-      const body = JSON.stringify(spec, null, 2);
-      res.writeHead(200, {
-        "content-type": "application/json; charset=utf-8",
-        "cache-control": "no-store",
-      });
-      res.end(body);
+      sendJson(res, 200, spec);
+      return;
+    }
+
+    if (
+      req.method === "POST" &&
+      (url.pathname === "/api/preview" || url.pathname === "/api/apply")
+    ) {
+      if (!editing) {
+        res.writeHead(404);
+        res.end("Editing not enabled");
+        return;
+      }
+      readJsonBody(req)
+        .then((payload: EditPayload) => {
+          if (url.pathname === "/api/preview") {
+            const preview = previewEdits(
+              editing.runtime,
+              editing.workspaceRoot,
+              editing.configPath,
+              payload
+            );
+            sendJson(res, preview.validation.ok ? 200 : 422, preview);
+            return;
+          }
+          const result = applyEdits(
+            editing.runtime,
+            editing.workspaceRoot,
+            editing.configPath,
+            payload
+          );
+          if (!result.ok) {
+            sendJson(res, 422, result);
+            return;
+          }
+          inspectAgent({ workspaceRoot: editing.workspaceRoot, configPath: editing.configPath })
+            .then((newSpec) => sendJson(res, 200, { ...result, spec: newSpec }))
+            .catch((err) =>
+              sendJson(res, 500, { ok: false, errors: [{ message: String(err) }] })
+            );
+        })
+        .catch((err) =>
+          sendJson(res, 400, { ok: false, errors: [{ message: String(err) }] })
+        );
       return;
     }
 
@@ -116,4 +163,27 @@ function isAddressInUse(error: unknown): boolean {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function readJsonBody(req: IncomingMessage): Promise<EditPayload> {
+  return new Promise((resolveBody, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => {
+      try {
+        resolveBody(JSON.parse(Buffer.concat(chunks).toString("utf-8") || "{}") as EditPayload);
+      } catch (err) {
+        reject(err);
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function sendJson(res: ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+  });
+  res.end(JSON.stringify(body, null, 2));
 }
