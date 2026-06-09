@@ -72,7 +72,7 @@ export const PermissionsConfigSchema = z.object({
   mode: z.enum(["yolo", "ask", "plan"]).default("ask"),
   interruptOn: z.array(z.string()).default(["write_file", "edit_file", "execute"]),
   allowedPaths: z.array(z.string()).default(["src/app/", "prompts/", "skills/", "config/"]),
-  deniedPaths: z.array(z.string()).default(["src/runtime/"]),
+  deniedPaths: z.array(z.string()).default(["src/runtime/", "src/surfaces/"]),
 });
 
 export const SandboxConfigSchema = z.object({
@@ -85,7 +85,7 @@ export const SandboxConfigSchema = z.object({
    */
   profile: z.enum(["custom", "workspace-write", "read-only", "open"]).default("custom"),
   writablePaths: z.array(z.string()).default(["src/app/", "prompts/", "skills/", "config/"]),
-  deniedWritePaths: z.array(z.string()).default(["src/runtime/"]),
+  deniedWritePaths: z.array(z.string()).default(["src/runtime/", "src/surfaces/"]),
   environment: z.object({
     allowedEnv: z.array(z.string()).default([
       "LLM_PROVIDER",

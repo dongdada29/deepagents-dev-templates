@@ -9,17 +9,11 @@ import { migrateLegacyState } from "../storage/runtime-storage.js";
 import { renderHelp, renderTools, renderConfig, renderStatus, renderSessions, renderSession, renderPlan, renderHistory, renderMemory, renderCheckpoints, renderApprovals } from "./rendering.js";
 import type { SlashCommandDefinition } from "./types.js";
 
-export type {
-  SlashEnvironment,
-  SlashToolInfo,
-  SlashCommandConfig,
-  SlashCommandContext,
-  SlashCommandResult,
-  ParsedSlashCommand,
-  SlashCommandDefinition,
-} from "./types.js";
-
-export { ACP_BUILTIN_COMMANDS, ACP_DEFAULT_COMMAND_NAMES } from "./types.js";
+// NOTE: This file has a bidirectional value import with rendering.ts
+// (we import render* functions; rendering.ts imports COMMANDS). This is safe
+// because COMMANDS is a synchronous top-level const and render functions are
+// only called inside deferred execute callbacks, never at module init time.
+// Do NOT add top-level calls that read COMMANDS from rendering.ts.
 
 export const COMMANDS: SlashCommandDefinition[] = [
   {

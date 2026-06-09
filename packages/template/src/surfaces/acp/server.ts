@@ -38,7 +38,7 @@ function readPackageVersionSafe(): string | undefined {
     // Resolve relative to this file so the lookup works regardless of cwd.
     const { readFileSync } = require("node:fs") as typeof import("node:fs");
     const { dirname, join } = require("node:path") as typeof import("node:path");
-    const pkgPath = join(dirname(new URL(import.meta.url).pathname), "..", "package.json");
+    const pkgPath = join(dirname(new URL(import.meta.url).pathname), "..", "..", "..", "package.json");
     const parsed = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: string };
     cachedPackageVersion = typeof parsed?.version === "string" ? parsed.version : undefined;
   } catch {
