@@ -2,7 +2,7 @@
   "schema": "nuwaclaw.agent-package.v1",
   "metadata": {
     "name": "deepagents-app-py",
-    "version": "0.2.10",
+    "version": "0.2.11",
     "framework": "pydantic-ai",
     "pythonVersion": ">=3.11",
     "deepagentsVersion": ">=0.2.0",

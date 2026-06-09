@@ -1,6 +1,6 @@
 [project]
 name = "deepagents-app-py"
-version = "0.2.10"
+version = "0.2.11"
 description = "DeepAgents Python application agent template — ACP server, tools, skills, config, distribution. Built on pydantic-ai + pydantic-deepagents."
 readme = "README.md"
 keywords = [
