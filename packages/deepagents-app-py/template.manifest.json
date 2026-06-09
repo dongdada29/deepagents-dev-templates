@@ -1,18 +1,29 @@
 {
   "schema": "nuwaclaw.template-manifest.v1",
   "name": "deepagents-app-py",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "framework": "pydantic-ai",
   "pythonVersion": ">=3.11",
   "zones": {
     "protected": {
-      "paths": ["src/deepagents_app_py/runtime/", "src/deepagents_app_py/surfaces/"]
+      "paths": [
+        "src/deepagents_app_py/runtime/",
+        "src/deepagents_app_py/surfaces/"
+      ]
     },
     "ai-editable": {
-      "paths": ["src/deepagents_app_py/app/", "prompts/", "skills/"]
+      "paths": [
+        "src/deepagents_app_py/app/",
+        "prompts/",
+        "skills/"
+      ]
     },
     "user-platform": {
-      "paths": ["config/", "agents/", ".deepagents/"]
+      "paths": [
+        "config/",
+        "agents/",
+        ".deepagents/"
+      ]
     }
   },
   "acceptance": {
