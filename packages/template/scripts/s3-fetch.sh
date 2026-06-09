@@ -182,7 +182,7 @@ s3_fetch_artifact_at_version() {
   mkdir -p "$dest_dir"
   local dest="$dest_dir/$file"
 
-  echo "→ fetching s3://${bucket}/${prefix}/versions/${version}/artifacts/${file}"
+  echo "→ fetching s3://${bucket}/${prefix}/versions/${version}/artifacts/${file}" >&2
   _s3_download "$bucket" "${prefix}/versions/${version}/artifacts/${file}" "$dest"
 
   local checksums
