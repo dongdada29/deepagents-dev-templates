@@ -69,9 +69,8 @@ s3_engine_id() {
 
 # Download a public S3 object to a local file.
 # Always uses --no-sign-request (artifacts/scripts/checksums are public reads).
-# Uses s3api get-object to avoid the CRC32 checksum validation that aws s3 cp
-# performs against MinIO response headers, which can differ from actual content
-# on multipart-uploaded objects.
+# Uses `aws s3 cp` instead of `s3api get-object` for better MinIO compatibility
+# (s3api get-object may fail silently on some MinIO versions / macOS).
 # $1 = bucket, $2 = key, $3 = dest path
 _s3_download() {
   local bucket="$1" key="$2" dest="$3"
@@ -82,7 +81,7 @@ _s3_download() {
   if [[ "${NUWAX_S3_NO_VERIFY_SSL:-0}" == "1" ]]; then
     args+=(--no-verify-ssl)
   fi
-  aws s3api get-object --bucket "$bucket" --key "$key" "${args[@]}" "$dest" >/dev/null
+  aws s3 cp "s3://${bucket}/${key}" "$dest" "${args[@]}" >/dev/null
 }
 
 # Resolve a channel pointer to a version string. Echoes "<version>".
