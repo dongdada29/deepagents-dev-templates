@@ -223,10 +223,13 @@ function writeJson(rel, mutate) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
 }
 
-writeJson("package.json", (j) => { j.version = version; });
+function esc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+const agentName = JSON.parse(fs.readFileSync(path.join(pkgDir, "agent-package.json"), "utf8")).name;
+
+writeJson("package.json", (j) => { j.version = version; j.name = agentName; });
 
 writeJson("config/app-agent.config.json", (j) => {
-  if (j.agent) j.agent.version = version;
+  if (j.agent) { j.agent.version = version; j.agent.name = agentName; }
 });
 
 writeJson("agent-package.json", (j) => {
@@ -239,8 +242,9 @@ writeJson("agent-package.json", (j) => {
   }
   for (const alt of j.alternativeSources || []) {
     if ("version" in alt) alt.version = version;
+    if ("package" in alt) alt.package = agentName;
     if (typeof alt.path === "string") {
-      alt.path = alt.path.replace(/deepagents-app-[^.]+\.tgz$/, `deepagents-app-${version}.tgz`);
+      alt.path = alt.path.replace(new RegExp(esc(agentName) + "[^.]+\\.tgz$"), `${agentName}-${version}.tgz`);
     }
     if (typeof alt.ref === "string" && alt.ref.startsWith("v")) alt.ref = tag;
   }

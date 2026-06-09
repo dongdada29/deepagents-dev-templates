@@ -83,15 +83,17 @@ if [[ "$VERSION" != "$PKG_VERSION" || "$VERSION" != "$AGENT_VERSION" ]]; then
   const version = process.env.VERSION;
   const tag = process.env.TAG;
   const pkgDir = process.env.PKG_DIR;
+  function esc(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
   function writeJson(rel, mutate) {
     const file = path.join(pkgDir, rel);
     const data = JSON.parse(fs.readFileSync(file, "utf8"));
     mutate(data);
     fs.writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
   }
-  writeJson("package.json", (j) => { j.version = version; });
+  const agentName = JSON.parse(fs.readFileSync(path.join(pkgDir, "agent-package.json"), "utf8")).name;
+  writeJson("package.json", (j) => { j.version = version; j.name = agentName; });
   writeJson("config/app-agent.config.json", (j) => {
-    if (j.agent) j.agent.version = version;
+    if (j.agent) { j.agent.version = version; j.agent.name = agentName; }
   });
   writeJson("agent-package.json", (j) => {
     j.version = version;
@@ -102,8 +104,9 @@ if [[ "$VERSION" != "$PKG_VERSION" || "$VERSION" != "$AGENT_VERSION" ]]; then
     }
     for (const alt of j.alternativeSources || []) {
       if ("version" in alt) alt.version = version;
+      if ("package" in alt) alt.package = agentName;
       if (typeof alt.path === "string")
-        alt.path = alt.path.replace(/deepagents-app-[^.]+\.tgz$/, `deepagents-app-${version}.tgz`);
+        alt.path = alt.path.replace(new RegExp(esc(agentName) + "[^.]+\\.tgz$"), `${agentName}-${version}.tgz`);
       if (typeof alt.ref === "string" && alt.ref.startsWith("v")) alt.ref = tag;
     }
   });

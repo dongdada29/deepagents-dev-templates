@@ -59,23 +59,27 @@ s3_bucket() {
   printf '%s' "${NUWAX_S3_BUCKET:-nuwax-packages}"
 }
 
+# Central name: all other names derive from this single fallback.
+# Override via NUWAX_S3_ENGINE_ID; scripts that run locally read agent-package.json instead.
+_S3_ENGINE_ID="${NUWAX_S3_ENGINE_ID:-deepagents-app}"
+
 s3_prefix() {
-  printf '%s' "${NUWAX_S3_PREFIX:-agent-engines/deepagents-app}"
+  printf '%s' "${NUWAX_S3_PREFIX:-agent-engines/${_S3_ENGINE_ID}}"
 }
 
 s3_engine_id() {
-  printf '%s' "${NUWAX_S3_ENGINE_ID:-deepagents-app}"
+  printf '%s' "${_S3_ENGINE_ID}"
 }
 
 # The agent name used for nuwax artifacts (zip/tar).
 # Falls back to engine id when not set explicitly.
 s3_agent_name() {
-  printf '%s' "${NUWAX_S3_AGENT_NAME:-deepagents-app}"
+  printf '%s' "${NUWAX_S3_AGENT_NAME:-${_S3_ENGINE_ID}}"
 }
 
 # The npm package name used for npm-tgz artifacts.
 s3_pkg_name() {
-  printf '%s' "${NUWAX_S3_PKG_NAME:-deepagents-app}"
+  printf '%s' "${NUWAX_S3_PKG_NAME:-${_S3_ENGINE_ID}}"
 }
 
 # Download a public S3 object to a local file.
