@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-/** packages/template root (scripts/scaffold/ -> ../../) */
+/** packages/deepagents-app-ts root (scripts/scaffold/ -> ../../) */
 export const PKG_ROOT = resolve(__dirname, "../..");
 
 const NAME_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;

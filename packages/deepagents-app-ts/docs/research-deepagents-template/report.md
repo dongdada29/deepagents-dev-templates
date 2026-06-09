@@ -665,20 +665,20 @@ DeepAgents Dev Templates 是一个**生产级**的 AI Agent 开发模板，具�
 
 | 模块 | 路径 |
 |------|------|
-| 主入口 | [src/index.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/index.ts) |
-| ACP 服务器 | [src/runtime/acp-server.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/runtime/acp-server.ts) |
-| Agent 工厂 | [src/runtime/agent-factory.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/runtime/agent-factory.ts) |
-| 配置加载器 | [src/runtime/config-loader.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/runtime/config-loader.ts) |
-| 中央协调器 | [src/runtime/helpers.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/runtime/helpers.ts) |
-| 平台客户端 | [src/runtime/platform-client.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/runtime/platform-client.ts) |
-| MCP 管理器 | [src/runtime/mcp-manager.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/runtime/mcp-manager.ts) |
-| 变量管理器 | [src/runtime/variable-manager.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/runtime/variable-manager.ts) |
-| 代码图 | [src/runtime/code-graph.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/runtime/code-graph.ts) |
-| 日志器 | [src/runtime/logger.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/runtime/logger.ts) |
-| 工具注册 | [src/app/tools/index.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/app/tools/index.ts) |
-| 钩子系统 | [src/app/hooks/index.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/app/hooks/index.ts) |
-| CLI REPL | [src/cli/repl.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/cli/repl.ts) |
-| CLI 单次调用 | [src/cli/one-shot.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/src/cli/one-shot.ts) |
-| 模板清单 | [template.manifest.json](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/template.manifest.json) |
-| Agent 包清单 | [agent-package.json](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/agent-package.json) |
-| 项目配置 | [config/app-agent.config.json](file:///Users/apple/workspace/deepagents-dev-templates/packages/template/config/app-agent.config.json) |
+| 主入口 | [src/index.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/index.ts) |
+| ACP 服务器 | [src/runtime/acp-server.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/runtime/acp-server.ts) |
+| Agent 工厂 | [src/runtime/agent-factory.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/runtime/agent-factory.ts) |
+| 配置加载器 | [src/runtime/config-loader.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/runtime/config-loader.ts) |
+| 中央协调器 | [src/runtime/helpers.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/runtime/helpers.ts) |
+| 平台客户端 | [src/runtime/platform-client.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/runtime/platform-client.ts) |
+| MCP 管理器 | [src/runtime/mcp-manager.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/runtime/mcp-manager.ts) |
+| 变量管理器 | [src/runtime/variable-manager.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/runtime/variable-manager.ts) |
+| 代码图 | [src/runtime/code-graph.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/runtime/code-graph.ts) |
+| 日志器 | [src/runtime/logger.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/runtime/logger.ts) |
+| 工具注册 | [src/app/tools/index.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/app/tools/index.ts) |
+| 钩子系统 | [src/app/hooks/index.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/app/hooks/index.ts) |
+| CLI REPL | [src/cli/repl.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/cli/repl.ts) |
+| CLI 单次调用 | [src/cli/one-shot.ts](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/cli/one-shot.ts) |
+| 模板清单 | [template.manifest.json](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/template.manifest.json) |
+| Agent 包清单 | [agent-package.json](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/agent-package.json) |
+| 项目配置 | [config/app-agent.config.json](file:///Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/config/app-agent.config.json) |

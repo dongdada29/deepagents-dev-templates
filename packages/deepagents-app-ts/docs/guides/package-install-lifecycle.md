@@ -1,7 +1,7 @@
 # Package Install Lifecycle
 
 This document records the package, install, upgrade, and uninstall
-lifecycle for distributing `packages/template` as a Nuwax Agent engine.
+lifecycle for distributing `packages/deepagents-app-ts` as a Nuwax Agent engine.
 
 The initial declarative skeleton now lives in `.nuwax-agent/package.config.json`,
 `.nuwax-agent/placeholders.json`, and `.nuwax-agent/lifecycle.json`. A local
@@ -37,7 +37,7 @@ Production platform installer validation is still planned work.
 Default output directory:
 
 ```text
-packages/template/dist-packages/
+packages/deepagents-app-ts/dist-packages/
 ```
 
 Expected files:

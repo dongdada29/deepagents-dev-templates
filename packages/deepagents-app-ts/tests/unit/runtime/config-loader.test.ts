@@ -79,7 +79,7 @@ describe("config-loader", () => {
     const config = loadConfig({ workspaceRoot });
 
     expect(config.agent.name).toBe("deepagents-app-ts");
-    expect(config.mcp.configPath).toMatch(/packages\/template\/config\/mcp\.default\.json$/);
+    expect(config.mcp.configPath).toMatch(/packages\/deepagents-app-ts\/config\/mcp\.default\.json$/);
   });
 
   it("allows the main config path to be switched with DEEPAGENTS_CONFIG_PATH", async () => {

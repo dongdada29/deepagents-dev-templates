@@ -1,7 +1,7 @@
 # Agent Core Progress
 
 This document is the canonical progress tracker for the agent core in
-`packages/template`. It records what is supported today, what is planned, and
+`packages/deepagents-app-ts`. It records what is supported today, what is planned, and
 what remains blocked by platform or protocol dependencies.
 
 ## Status Legend

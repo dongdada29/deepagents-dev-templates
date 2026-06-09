@@ -39,9 +39,9 @@ npm run build
       "args": [
         "--import",
         "tsx",
-        "/Users/apple/workspace/deepagents-dev-templates/packages/template/src/index.ts",
+        "/Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/src/index.ts",
         "--config",
-        "/Users/apple/workspace/deepagents-dev-templates/packages/template/config/app-agent.config.json"
+        "/Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts/config/app-agent.config.json"
       ],
       "env": {
         "ANTHROPIC_API_KEY": "<你的 API Key>",
@@ -323,7 +323,7 @@ npm run test:acp-smoke
 
 ## 已知风险与注意事项
 
-1. **无 `cwd` 配置**：Zed 不支持 `cwd`，工作目录自动设为项目根目录。需在 Zed 中直接打开 `packages/template/` 作为项目，否则相对路径（配置文件、prompts、skills）会找不到
+1. **无 `cwd` 配置**：Zed 不支持 `cwd`，工作目录自动设为项目根目录。需在 Zed 中直接打开 `packages/deepagents-app-ts/` 作为项目，否则相对路径（配置文件、prompts、skills）会找不到
 2. **LLM 凭证**：`.env` 中的 `ANTHROPIC_API_KEY` 指向 `open.bigmodel.cn`，需确认该 endpoint 的 ACP 兼容性
 3. **ACP SDK 版本**：项目依赖 `deepagents-acp@latest`，需确认与 Zed 当前 ACP 实现兼容
 4. **Zed ACP 支持**：部分功能（如 `loadSession`、`commands`）可能不完全可用

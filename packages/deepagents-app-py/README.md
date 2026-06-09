@@ -1,6 +1,6 @@
 # DeepAgents Dev Templates — Python
 
-A Python port of the TypeScript `packages/template` agent template, built on
+A Python port of the TypeScript `packages/deepagents-app-ts` agent template, built on
 [pydantic-ai](https://github.com/pydantic/pydantic-ai) and
 [pydantic-deepagents](https://github.com/pydantic/pydantic-deepagents).
 

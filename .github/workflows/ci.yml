@@ -4,12 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - "packages/template/**"
+      - "packages/deepagents-app-ts/**"
       - "packages/inspector/**"
       - "package-lock.json"
   pull_request:
     paths:
-      - "packages/template/**"
+      - "packages/deepagents-app-ts/**"
       - "packages/inspector/**"
 
 permissions:

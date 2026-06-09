@@ -2,7 +2,7 @@
 
 **状态:** 设计已通过(brainstorm),待生成实现计划
 **日期:** 2026-06-09
-**范围:** `packages/inspector`(消费 `packages/template` 的公共 API)
+**范围:** `packages/inspector`(消费 `packages/deepagents-app-ts` 的公共 API)
 
 ## 背景
 

@@ -280,7 +280,7 @@ bash scripts/upgrade.sh --from-bucket --target-version 0.3.0-rc.1 \
 
 ### 本地开发：`.env`
 
-`packages/template/.env` 已经被 `.gitignore` 覆盖（line 8-9），本地写真实值不会进 git。`.env.example` 里只放空模板：
+`packages/deepagents-app-ts/.env` 已经被 `.gitignore` 覆盖（line 8-9），本地写真实值不会进 git。`.env.example` 里只放空模板：
 
 ```bash
 # --- MinIO / S3 Distribution ---

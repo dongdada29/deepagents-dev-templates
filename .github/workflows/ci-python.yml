@@ -4,10 +4,10 @@ on:
   push:
     branches: [main]
     paths:
-      - "packages/template-python/**"
+      - "packages/deepagents-app-py/**"
   pull_request:
     paths:
-      - "packages/template-python/**"
+      - "packages/deepagents-app-py/**"
 
 permissions:
   contents: read
@@ -25,13 +25,13 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install deps
-        working-directory: packages/template-python
+        working-directory: packages/deepagents-app-py
         run: uv sync --group dev --group lint
       - name: Ruff check
-        working-directory: packages/template-python
+        working-directory: packages/deepagents-app-py
         run: uv run ruff check .
       - name: Pyright
-        working-directory: packages/template-python
+        working-directory: packages/deepagents-app-py
         run: uv run pyright
 
   test:
@@ -51,10 +51,10 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install deps
-        working-directory: packages/template-python
+        working-directory: packages/deepagents-app-py
         run: uv sync --group dev
       - name: Run tests
-        working-directory: packages/template-python
+        working-directory: packages/deepagents-app-py
         run: uv run pytest
 
   build:
@@ -68,5 +68,5 @@ jobs:
         with:
           python-version: "3.11"
       - name: Build wheel + sdist
-        working-directory: packages/template-python
+        working-directory: packages/deepagents-app-py
         run: uv build

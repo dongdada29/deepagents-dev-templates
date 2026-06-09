@@ -25,7 +25,7 @@ const PASS = "\x1b[32m✓ PASS\x1b[0m";
 const FAIL = "\x1b[31m✗ FAIL\x1b[0m";
 const INFO = "\x1b[36m→\x1b[0m";
 
-// 修正：用 template 目录作为 cwd（与 Zed 打开 packages/template/ 一致）
+// 修正：用 template 目录作为 cwd（与 Zed 打开 packages/deepagents-app-ts/ 一致）
 const TEMPLATE_DIR = new URL("..", import.meta.url).pathname.replace(/\/$/, "");
 
 // Load .env explicitly to get the correct API endpoint (override shell env)

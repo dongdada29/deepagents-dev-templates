@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-06-09-inspector-editable-design.md`
 
-**Precondition:** `packages/template` builds and its `./runtime` barrel exports `AppConfigSchema`, `loadConfig`, `resolveConfiguredWorkspaceRoot` (verify with `npm test -w packages/inspector` green before starting). The inspector consumes the template **public barrel** only, so template-internal file moves do not affect this plan.
+**Precondition:** `packages/deepagents-app-ts` builds and its `./runtime` barrel exports `AppConfigSchema`, `loadConfig`, `resolveConfiguredWorkspaceRoot` (verify with `npm test -w packages/inspector` green before starting). The inspector consumes the template **public barrel** only, so template-internal file moves do not affect this plan.
 
 ---
 

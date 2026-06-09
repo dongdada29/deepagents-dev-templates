@@ -1,6 +1,6 @@
 """DeepAgents Python application agent template.
 
-A drop-in Python port of the TypeScript ``packages/template`` agent
+A drop-in Python port of the TypeScript ``packages/deepagents-app-ts`` agent
 template, layered on top of pydantic-ai + pydantic-deepagents.
 
 Entry points:

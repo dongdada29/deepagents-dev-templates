@@ -83,7 +83,7 @@ The HTML page fetches `/api/spec` synchronously before loading React. If the CDN
 | `graph: null` with warning "does not expose getGraphAsync" | LangGraph version doesn't match the expected API shape | Update `@langchain/langgraph` to v1.x+ |
 | `warnings` includes "Failed to render Mermaid graph" | The graph contains characters Mermaid can't parse | The spec is still valid; graph tab won't render but JSON/pipeline/resources tabs work |
 | Port 7322 already in use | Another inspector or service is running | Server auto-increments to 7323, 7324, ..., 7332 |
-| `npm run inspect` fails with "Cannot find module" | Template hasn't been built, or `INSPECTOR_TEMPLATE_SOURCE` not set in dev | Run `npm run build -w packages/template`, or set `INSPECTOR_TEMPLATE_SOURCE=1` for source imports |
+| `npm run inspect` fails with "Cannot find module" | Template hasn't been built, or `INSPECTOR_TEMPLATE_SOURCE` not set in dev | Run `npm run build -w packages/deepagents-app-ts`, or set `INSPECTOR_TEMPLATE_SOURCE=1` for source imports |
 
 ## Reading the Results
 

@@ -1,7 +1,7 @@
 {
   "schema": "nuwaclaw.agent-code-graph.v1",
   "generatedAt": "2026-06-05T08:08:39.571Z",
-  "root": "/Users/apple/workspace/deepagents-dev-templates/packages/template",
+  "root": "/Users/apple/workspace/deepagents-dev-templates/packages/deepagents-app-ts",
   "nodes": [
     {
       "id": "entry:index",

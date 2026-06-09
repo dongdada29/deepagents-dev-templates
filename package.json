@@ -6,11 +6,11 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build -w packages/template",
-    "test": "npm test -w packages/template",
-    "dev": "npm run dev -w packages/template",
-    "typecheck": "npm run typecheck -w packages/template",
-    "graph": "npm run graph -w packages/template",
+    "build": "npm run build -w packages/deepagents-app-ts",
+    "test": "npm test -w packages/deepagents-app-ts",
+    "dev": "npm run dev -w packages/deepagents-app-ts",
+    "typecheck": "npm run typecheck -w packages/deepagents-app-ts",
+    "graph": "npm run graph -w packages/deepagents-app-ts",
     "inspect": "npm run inspect -w packages/inspector"
   },
   "description": "DeepAgents development templates — monorepo for agent template and dev-agent config",

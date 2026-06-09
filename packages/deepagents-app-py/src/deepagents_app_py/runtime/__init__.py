@@ -1,6 +1,6 @@
 """Runtime layer — protected engine.
 
-Mirrors ``packages/template/src/runtime/`` from the TypeScript template.
+Mirrors ``packages/deepagents-app-ts/src/runtime/`` from the TypeScript template.
 Modules in this package are infrastructure code and should not be modified
 unless the user explicitly asks for it (see ``template.manifest.json``
 ``zones.protected``).

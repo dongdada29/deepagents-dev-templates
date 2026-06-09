@@ -6,7 +6,7 @@ Monorepo for building, inspecting, and distributing DeepAgents AI applications.
 
 | Package | Description |
 |---|---|
-| [`packages/template`](./packages/template/) | DeepAgents application template — ACP server, tools, skills, config, distribution |
+| [`packages/deepagents-app-ts`](./packages/deepagents-app-ts/) | DeepAgents application template — ACP server, tools, skills, config, distribution |
 | [`packages/inspector`](./packages/inspector/) | Read-only orchestration visualizer — inspect agent structure, middleware chain, and LangGraph topology |
 | [`packages/dev-agent`](./packages/dev-agent/) | Developer agent config and skills |
 
@@ -14,7 +14,7 @@ Monorepo for building, inspecting, and distributing DeepAgents AI applications.
 
 ```bash
 npm install
-npm run build -w packages/template
+npm run build -w packages/deepagents-app-ts
 ```
 
 ## Scripts
