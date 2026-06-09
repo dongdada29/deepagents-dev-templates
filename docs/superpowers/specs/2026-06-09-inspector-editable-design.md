@@ -1,168 +1,155 @@
-# Inspector: Read-only → Editable Orchestration
+# Inspector:只读 → 可编辑编排
 
-**Status:** Design approved (brainstorm), pending implementation plan
-**Date:** 2026-06-09
-**Scope:** `packages/inspector` (consumes `packages/template` public API)
+**状态:** 设计已通过(brainstorm),待生成实现计划
+**日期:** 2026-06-09
+**范围:** `packages/inspector`(消费 `packages/template` 的公共 API)
 
-## Context
+## 背景
 
-The inspector today produces a read-only `AgentOrchestrationSpec` — a projection
-of the agent's `AppConfig` plus (in `--full`) the compiled LangGraph topology. The
-project's north-star is a **self-hosted, in-tree analog of LangSmith / LangGraph
-Studio's "visualize + edit the current agent orchestration"** capability (no
-LangSmith SaaS; config-as-source-of-truth). This design makes the inspector
-**editable**: edit the orchestration and write it back to the structured config +
-editable-zone text files.
+当前 inspector 产出一个只读的 `AgentOrchestrationSpec` —— 它是 agent 的 `AppConfig`
+的投影,外加(`--full` 时)编译出的 LangGraph 拓扑。项目的北极星是做一个
+**自托管、in-tree 的 LangSmith / LangGraph Studio 「可视化 + 编辑当前 agent 编排」
+能力的对应物**(不依赖 LangSmith 云;配置即真相)。本设计让 inspector **可编辑**:
+编辑编排并写回结构化配置 + 可编辑区文本文件。
 
-## Goals / Non-goals
+## 目标 / 非目标
 
-**In scope (v1):**
-- Edit **structured config** fields surfaced in the spec (model, permissions,
-  agent meta, middleware on/off + params, compaction/eviction, memory, skills dirs).
-- Edit **existing prompt / skill / subagent text** (system prompt file, `SKILL.md`,
-  `AGENT.md`).
-- Studio-style UI: config-derived orchestration graph (center) + right editor panel.
-- Preview-diff → confirm → write, with Zod + protected-zone guards.
+**范围内(v1):**
+- 编辑 spec 中呈现的**结构化配置**字段(model、permissions、agent meta、middleware
+  开关与参数、compaction/eviction、memory、skills 目录)。
+- 编辑**现有的 prompt / skill / subagent 文本**(system prompt 文件、`SKILL.md`、`AGENT.md`)。
+- Studio 风格 UI:配置派生的编排图(中)+ 右侧编辑面板。
+- 预览 diff → 确认 → 写盘,带 Zod + 保护区两道闸。
 
-**Out of scope (v1, deferred):**
-- Adding/removing entities (new subagents, skills, MCP servers, hooks).
-- Editing tools (code-defined — would mean writing TypeScript).
-- A raw-JSON / Monaco "advanced" editor (possible secondary affordance, later).
-- Running threads / state inspection / time-travel (Studio runtime debugging).
+**范围外(v1,延后):**
+- 增删条目(新建 subagent / skill / MCP server / hook)。
+- 编辑 tools(代码定义 —— 等于写 TypeScript)。
+- 原始 JSON / Monaco「高级」编辑器(可作为次要入口,后续)。
+- 运行线程 / 状态检查 / 时间旅行(Studio 的运行时调试)。
 
-## Key decisions
+## 关键决策
 
-| Decision | Choice | Rationale |
+| 决策 | 选择 | 理由 |
 |---|---|---|
-| Editable scope | config fields + existing prompt/skill text | the editable orchestration surface |
-| Edit depth | edit existing values only (no add/remove) | YAGNI; simple data model |
-| Save model | preview diff → confirm → write | writes real project files; preview is safer |
-| Layout | Studio-style: graph center + right editor panel | matches LangGraph Studio mental model |
-| Center canvas | config-derived orchestration graph (dry-run + full) | editing needs no creds; `--full` overlays real LangGraph |
-| Write target | the **source** `app-agent.config.json` (raw, unmerged) + text files | clean write-back; show merged value + provenance badge |
-| Reverse-projection from spec | rejected | spec is a lossy projection; round-trip is fragile |
+| 可编辑范围 | 配置字段 + 现有 prompt/skill 文本 | 即「可编辑编排面」 |
+| 编辑深度 | 仅改现有值(不增删) | YAGNI;数据模型简单 |
+| 保存模型 | 预览 diff → 确认 → 写 | 写真实项目文件,预览更稳 |
+| 布局 | Studio 风格:图居中 + 右侧编辑面板 | 贴合 LangGraph Studio 心智模型 |
+| 中间 canvas | 配置派生编排图(dry-run + full) | 编辑无需凭证;`--full` 叠加真实 LangGraph |
+| 写回目标 | **源** `app-agent.config.json`(原始未合并)+ 文本文件 | 写回干净;显示合并值 + provenance 徽标 |
+| 从 spec 反向投影 | 否决 | spec 是有损投影,round-trip 脆弱 |
 
-## Architecture
+## 架构
 
-All new code lives in `packages/inspector`. Template is touched in exactly one
-place (expose its already-exported `AppConfigSchema` through the runtime adapter).
+全部新增代码在 `packages/inspector`。template 只动一处(把它已导出的
+`AppConfigSchema` 通过 runtime adapter 暴露出来)。
 
-### Core abstraction — `editable-model`
+### 核心抽象 —— `editable-model`
 
-A declarative table: each editable field → `{ configPath (dot path), type
-(enum|number|string|boolean|string[]), target (file), widget }`. Single source of
-truth that drives **both** the right-panel UI widgets **and** server-side
-validation/write. Enum values and numeric ranges are aligned with the template's
-`AppConfigSchema`.
+一张声明式表:每个可编辑字段 → `{ configPath(点路径), type(enum|number|string|
+boolean|string[]), target(文件), widget }`。单一真相,**同时驱动**右栏 UI 控件
+**和**服务端校验/写盘。枚举值与数值范围与 template 的 `AppConfigSchema` 对齐。
 
-### Inspector modules (new)
+### inspector 新增模块
 
-| Module | Responsibility |
+| 模块 | 职责 |
 |---|---|
-| `editing/editable-model.ts` | The editable-field declarations (above). |
-| `editing/config-source.ts` | Read/write the **source** `app-agent.config.json` (raw, unmerged); Zod-validate via template's `AppConfigSchema`. |
-| `editing/provenance.ts` | Compare source value vs merged effective value (from `loadConfig`) → flag env / `.deepagents`-shadowed fields. |
-| `editing/text-files.ts` | Read/write prompt / `SKILL.md` / `AGENT.md` text (protected-zone guarded). |
-| `editing/diff.ts` | Compute per-file before/after diffs for the preview. |
-| `editing/writer.ts` | Apply: validate → protected-zone guard → optimistic-concurrency check → atomic write. |
+| `editing/editable-model.ts` | 可编辑字段声明(上表)。 |
+| `editing/config-source.ts` | 读/写**源** `app-agent.config.json`(原始未合并);用 template 的 `AppConfigSchema` 做 Zod 校验。 |
+| `editing/provenance.ts` | 源值 vs 合并 effective 值(来自 `loadConfig`)比对 → 标记被 env / `.deepagents` 覆盖的字段。 |
+| `editing/text-files.ts` | 读/写 prompt / `SKILL.md` / `AGENT.md` 文本(保护区守卫)。 |
+| `editing/diff.ts` | 算逐文件 before/after diff 供预览。 |
+| `editing/writer.ts` | apply:校验 → 保护区守卫 → 乐观并发检查 → 原子写。 |
 
-### Server endpoints (`src/server.ts`)
+### server 端点(`src/server.ts`)
 
-- `GET  /api/spec` — unchanged (read-only snapshot, now includes an `editable` block).
-- `POST /api/preview` — body: edits → `{ files: [{path, kind, before, after}], validation }`.
-- `POST /api/apply` — body: edits → validate + write → returns a freshly re-inspected spec.
+- `GET  /api/spec` —— 不变(只读快照,现多一个 `editable` 块)。
+- `POST /api/preview` —— body: edits → `{ files: [{path, kind, before, after}], validation }`。
+- `POST /api/apply` —— body: edits → 校验 + 写盘 → 返回重跑 inspect 的新 spec。
 
-The **edits payload** is `{ config: Record<dotPath, value>, text: [{ path, content }] }`:
-`config` is a flat map of changed `app-agent.config.json` fields keyed by dot-path
-(merged into the raw source before validation); `text` is full replacement content
-for edited prompt/skill/subagent files. Each edited file also carries the
-read-time `baseHash` for the optimistic-concurrency check.
+**edits payload** 为 `{ config: Record<dotPath, value>, text: [{ path, content }] }`:
+`config` 是改动的 `app-agent.config.json` 字段按点路径的扁平映射(校验前合并进原始
+源文件);`text` 是被编辑的 prompt/skill/subagent 文件的全量替换内容。每个被编辑
+文件还带读取时的 `baseHash` 供乐观并发检查。
 
-The server receives `workspaceRoot` / `configPath` from the CLI at startup.
+server 启动时从 CLI 拿到 `workspaceRoot` / `configPath`。
 
-### Types (`src/types.ts`)
+### types(`src/types.ts`)
 
-Add an `editable` block to `AgentOrchestrationSpec` (per-section: which fields are
-editable + per-field provenance), and the preview/apply request/response types.
+给 `AgentOrchestrationSpec` 加一个 `editable` 块(每节哪些字段可编辑 + 每字段
+provenance),以及 preview/apply 的请求/响应类型。
 
-### Template touch (minimal)
+### template 改动(最小)
 
-Extend the inspector's `template-runtime.ts` `TemplateRuntime` interface to expose
-the template's already-exported `AppConfigSchema` (used for validation). The
-inspector depends on the template's **public barrel** (`src/runtime/index.ts`), so
-it is unaffected by template-internal file moves. All file I/O is done by the
-inspector (it operates on a workspace).
+扩展 inspector 的 `template-runtime.ts` 的 `TemplateRuntime` 接口,暴露 template
+已导出的 `AppConfigSchema`(用于校验)。inspector 依赖 template 的**公共 barrel**
+(`src/runtime/index.ts`),因此**不受 template 内部文件移动影响**。所有文件 I/O
+由 inspector 自己做(它就是操作一个工作区的工具)。
 
-## UI (`web/graph-ui/`)
+## UI(`web/graph-ui/`)
 
-- **Center**: config-derived orchestration graph. Nodes per spec section (Agent,
-  Model, Prompt, Tools, Subagents, Skills, Middleware, Permissions, Memory).
-  Editable nodes are highlighted; read-only nodes (Tools = code-defined,
-  Subagents/Skills.files = file-discovered, Graph) are shown greyed with a "🔒
-  defined in code / discovered" note. In `--full`, the real compiled LangGraph
-  topology is overlaid / toggleable.
-- **Right editor panel**: driven by `editable-model`. Widget per type — enum→dropdown,
-  number→number input, boolean→toggle, string→text, string[]→tag-list editor,
-  prompt/skill→multi-line textarea. Per-field "overridden by env" badge (with the
-  effective value) when source ≠ merged. Inline Zod errors; Apply disabled while invalid.
-- **Change bar + diff modal**: change counter → "Review diff" → per-file before/after
-  diff → "Apply" / "Discard" (per-file opt-in).
+- **中间**:配置派生编排图。节点对应 spec 各节(Agent、Model、Prompt、Tools、
+  Subagents、Skills、Middleware、Permissions、Memory)。可编辑节点高亮;只读节点
+  (Tools = 代码定义,Subagents/Skills.files = 文件发现,Graph)灰显并标「🔒 代码
+  定义 / 文件发现」。`--full` 时叠加/可切换真实编译 LangGraph 拓扑。
+- **右侧编辑面板**:由 `editable-model` 驱动。按类型给控件 —— enum→下拉、number→
+  数字框、boolean→开关、string→文本、string[]→标签列表编辑、prompt/skill→多行
+  文本。当源 ≠ 合并值时,字段上挂「被 env 覆盖」徽标(并显示 effective 值)。
+  Zod 错误就地提示;非法时「应用」禁用。
+- **变更条 + diff 弹窗**:变更计数 → 「查看 diff」→ 逐文件 before/after →
+  「应用」/「放弃」(可逐文件勾选)。
 
-## Data flow
+## 数据流
 
 ```
-workspace files                inspector (server)                browser UI
-app-agent.config.json (SOURCE) ─ loadConfig() → merged effective
-prompts/*.md, SKILL.md, AGENT.md  readConfigSource() → raw source
-                                  provenance: source vs effective → badges
+工作区文件                      inspector(server)                 浏览器 UI
+app-agent.config.json(源) ── loadConfig() → 合并 effective
+prompts/*.md、SKILL.md、AGENT.md  readConfigSource() → 原始源
+                                  provenance: 源 vs effective → 徽标
                                   inspectAgent + editable-model → spec{editable}
-   GET /api/spec ───────────────────────────────────────────────► render graph + forms
-                                                                    user edits (in-memory)
+   GET /api/spec ───────────────────────────────────────────────► 渲染图 + 表单
+                                                                    用户编辑(内存副本)
    POST /api/preview ◄──────────────────────────────────────────── edits
-   diff.ts: per-file before/after ──────────────────────────────► diff modal
-                                                                    user clicks Apply
+   diff.ts: 逐文件 before/after ─────────────────────────────────► diff 弹窗
+                                                                    用户点应用
    POST /api/apply ◄──────────────────────────────────────────────┘
-   validate (AppConfigSchema) → protected-zone guard → concurrency check → atomic write
-   re-run inspectAgent → fresh spec ────────────────────────────► re-render
+   校验(AppConfigSchema)→ 保护区守卫 → 并发检查 → 原子写
+   重跑 inspectAgent → 新 spec ─────────────────────────────────► 重渲染
 ```
 
-## Validation & safety (the apply gates, in order)
+## 校验 & 安全(apply 的几道闸,按序)
 
-1. **Config validation** — run `AppConfigSchema.parse()` on the edited source JSON
-   before writing. On failure, return field-level errors; UI highlights the field;
-   no write.
-2. **Protected-zone guard** — every target path must resolve inside an editable zone
-   (`config/`, `prompts/`, `skills/`, `.agents/`) and within `workspaceRoot`. Reject
-   `src/runtime` / `src/surfaces` and any `../` / absolute escape. Reuses the
-   template's sandbox/deniedPaths concept (same protection the agent itself honors).
-3. **Optimistic concurrency** — capture each target file's content hash at read time;
-   on apply, if the on-disk content differs from that baseline (edited elsewhere),
-   reject and prompt reload. Never clobber external edits.
-4. **Atomic write** — temp file + `rename`.
-5. **Minimal diff** — re-serialize `app-agent.config.json` with 2-space indent
-   (matches the repo); it is plain `.json` (no comments) so nothing is lost.
-6. **Secrets** — config stores no secrets (env/placeholders). `baseUrl` / `apiKeyEnv`
-   names are editable; secret values are never displayed or written.
-7. **dry-run / full parity** — editing config needs no LLM; behavior is identical in
-   both modes. `--full` only adds the real graph layer.
+1. **配置校验** —— 写盘前对编辑后的源 JSON 跑 `AppConfigSchema.parse()`。失败返回
+   字段级错误;UI 高亮该字段;不写盘。
+2. **保护区守卫** —— 每个目标路径必须解析到可编辑区(`config/`、`prompts/`、
+   `skills/`、`.agents/`)内且在 `workspaceRoot` 内。拒绝 `src/runtime` / `src/surfaces`
+   以及任何 `../` / 绝对路径逃逸。复用 template 的 sandbox/deniedPaths 概念(与 agent
+   自身遵守的保护同源)。
+3. **乐观并发** —— 读取时记录每个目标文件的内容 hash;apply 时若磁盘当前内容 ≠
+   该 baseline(被别处改过),拒绝并提示重载。绝不 clobber 外部改动。
+4. **原子写** —— 临时文件 + `rename`。
+5. **最小 diff** —— `app-agent.config.json` 用 2 空格缩进重序列化(与仓库一致);它是
+   纯 `.json`(无注释),不丢信息。
+6. **secrets** —— 配置不存密钥(走 env/占位符)。可编辑 `baseUrl` / `apiKeyEnv` 名;
+   密钥值不显示也不写入。
+7. **dry-run / full 一致** —— 编辑配置不需要 LLM,两种模式行为相同。`--full` 只是多
+   一层真实图。
 
-## Testing
+## 测试
 
-Automated tests concentrate on the editing logic + server endpoints; the CDN
-React-Flow UI is verified manually (light DOM smoke at most). Follows the existing
-`INSPECTOR_TEMPLATE_SOURCE=1` vitest setup.
+自动化测试压在「编辑逻辑 + server 端点」;CDN React-Flow UI 走手验(至多轻量 DOM
+冒烟)。沿用 inspector 现有 `INSPECTOR_TEMPLATE_SOURCE=1` 的 vitest。
 
-- **Unit**: editable-model field→path mapping; `config-source` read/write round-trip;
-  `provenance` (source vs merged); `diff` computation; protected-zone guard (allow
-  editable zones / reject runtime + `../` escape); Zod rejection of invalid values.
-- **Server**: `/api/preview` returns expected per-file diff; `/api/apply` writes +
-  returns fresh spec; `/api/apply` rejects invalid config, protected path, and stale
-  baseline.
-- **Regression**: existing 6 inspector tests stay green; `GET /api/spec` and the
-  dry-run/full read-only paths are unchanged.
+- **单元**:editable-model 字段→路径映射;`config-source` 读写 round-trip;`provenance`
+  (源 vs 合并);`diff` 计算;保护区守卫(放行可编辑区 / 拒绝 runtime 与 `../` 逃逸);
+  Zod 拒绝非法值。
+- **server**:`/api/preview` 返回预期逐文件 diff;`/api/apply` 写盘 + 返回新 spec;
+  `/api/apply` 拒绝(非法配置 / 保护路径 / baseline 过期)。
+- **回归**:现有 6 个 inspector 测试保持绿;`GET /api/spec` 与 dry-run/full 只读
+  路径不变。
 
-## Future (post-v1)
+## 未来(v1 之后)
 
-- Add/remove entities (subagents, skills, MCP servers, hooks).
-- Raw-JSON / Monaco "Advanced" editor tab as a secondary affordance.
-- Studio-style runtime debugging (threads, state, time-travel) — separate effort.
+- 增删条目(subagent、skill、MCP server、hook)。
+- 原始 JSON / Monaco「高级」编辑器标签作为次要入口。
+- Studio 风格运行时调试(线程、状态、时间旅行)—— 单独立项。
