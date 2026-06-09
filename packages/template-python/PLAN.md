@@ -3,7 +3,7 @@
 ## Status: In Progress
 
 - [x] Package initialization (uv init, pyproject.toml)
-- [x] Source structure (src/deepagents_template/)
+- [x] Source structure (src/deepagents_app_py/)
 - [x] Runtime modules (config, middleware, platform, storage)
 - [x] Surfaces (ACP server, CLI REPL, one-shot)
 - [x] App tools (HTTP, variables, memory, etc.)

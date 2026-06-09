@@ -6,6 +6,6 @@ from importlib.metadata import version
 
 
 def test_package_import():
-    v = version("deepagents-dev-templates-python")
+    v = version("deepagents-app-py")
     assert v is not None
     assert isinstance(v, str)

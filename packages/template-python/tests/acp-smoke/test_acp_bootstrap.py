@@ -4,5 +4,5 @@ from __future__ import annotations
 
 
 def test_acp_import():
-    from deepagents_template.surfaces.acp.server import bootstrap
+    from deepagents_app_py.surfaces.acp.server import bootstrap
     assert bootstrap is not None

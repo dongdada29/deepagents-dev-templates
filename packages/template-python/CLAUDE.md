@@ -1,7 +1,7 @@
 # DeepAgents Dev Templates — Python Template
 
 ## Structure
-- `src/deepagents_template/` — Package source
+- `src/deepagents_app_py/` — Package source
   - `runtime/` — Protected engine (config, middleware, platform, storage)
   - `app/` — AI-editable business tools and hooks
   - `surfaces/` — ACP server and CLI entrypoints
@@ -17,4 +17,4 @@
 - Lint: `uv run ruff check .`
 - Type-check: `uv run pyright`
 - Build: `uv build`
-- Run: `uv run deepagents-app chat`
+- Run: `uv run deepagents-app-py chat`

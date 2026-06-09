@@ -8,18 +8,18 @@ A Python port of the TypeScript `packages/template` agent template, built on
 
 ```bash
 uv sync
-uv run deepagents-app chat
+uv run deepagents-app-py chat
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `deepagents-app` | Start ACP server (stdio) |
-| `deepagents-app chat` | Interactive REPL |
-| `deepagents-app ask "..."` | One-shot prompt |
-| `deepagents-app run <file>` | Run prompt from file |
-| `deepagents-app graph` | Generate code graph |
+| `deepagents-app-py` | Start ACP server (stdio) |
+| `deepagents-app-py chat` | Interactive REPL |
+| `deepagents-app-py ask "..."` | One-shot prompt |
+| `deepagents-app-py run <file>` | Run prompt from file |
+| `deepagents-app-py graph` | Generate code graph |
 
 ## Development
 

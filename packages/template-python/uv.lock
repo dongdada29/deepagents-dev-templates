@@ -931,7 +931,7 @@ wheels = [
 ]
 
 [[package]]
-name = "deepagents-dev-templates-python"
+name = "deepagents-app-py"
 version = "0.2.10"
 source = { editable = "." }
 dependencies = [
@@ -986,7 +986,7 @@ yaml = [
 dev = [
     { name = "build" },
     { name = "coverage" },
-    { name = "deepagents-dev-templates-python", extra = ["all"] },
+    { name = "deepagents-app-py", extra = ["all"] },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1016,7 +1016,7 @@ requires-dist = [
     { name = "agent-client-protocol", marker = "extra == 'acp'", specifier = ">=0.8.0" },
     { name = "anyio", specifier = ">=4.0" },
     { name = "click", specifier = ">=8.1" },
-    { name = "deepagents-dev-templates-python", extras = ["yaml", "cli", "acp", "sandbox"], marker = "extra == 'all'" },
+    { name = "deepagents-app-py", extras = ["yaml", "cli", "acp", "sandbox"], marker = "extra == 'all'" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "prompt-toolkit", specifier = ">=3.0" },
     { name = "prompt-toolkit", marker = "extra == 'cli'", specifier = ">=3.0.0" },
@@ -1046,7 +1046,7 @@ provides-extras = ["yaml", "cli", "acp", "sandbox", "all"]
 dev = [
     { name = "build", specifier = ">=1.0" },
     { name = "coverage", specifier = ">=7.0" },
-    { name = "deepagents-dev-templates-python", extras = ["all"] },
+    { name = "deepagents-app-py", extras = ["all"] },
     { name = "pre-commit", specifier = ">=4.0" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.23" },

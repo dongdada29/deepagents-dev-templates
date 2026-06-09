@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from deepagents_template.runtime.string import slugify, truncate
+from deepagents_app_py.runtime.string import slugify, truncate
 
 
 def test_slugify():

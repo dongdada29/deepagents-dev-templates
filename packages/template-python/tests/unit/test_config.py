@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from deepagents_template.runtime.config.config_schema import AppConfig
+from deepagents_app_py.runtime.config.config_schema import AppConfig
 
 
 def test_app_config_defaults():

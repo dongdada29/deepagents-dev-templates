@@ -1,7 +1,7 @@
 {
   "schema": "nuwaclaw.agent-package.v1",
   "metadata": {
-    "name": "deepagents-dev-templates-python",
+    "name": "deepagents-app-py",
     "version": "0.2.10",
     "framework": "pydantic-ai",
     "pythonVersion": ">=3.11",
@@ -9,7 +9,7 @@
     "description": "DeepAgents Python application agent template"
   },
   "bin": {
-    "start": "deepagents-app"
+    "start": "deepagents-app-py"
   },
   "distribution": {
     "type": "package",
