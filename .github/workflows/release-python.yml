@@ -1,0 +1,85 @@
+name: release (Python)
+
+# Triggers on a push of any python-v*.*.* tag.
+# Builds the Python wheel/sdist, packages Nuwax artifacts, and publishes to S3.
+
+on:
+  push:
+    tags:
+      - "python-v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq || true
+          sudo apt-get install -y -qq jq curl zip 2>&1 || true
+
+      - name: Install AWS CLI
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          sudo /tmp/aws/install --update 2>&1 | tail -1
+          aws --version
+
+      - name: Sync version files to tag
+        working-directory: packages/template-python
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#python-v}"
+          echo "Syncing version to ${VERSION}"
+
+          # Update pyproject.toml version
+          sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" pyproject.toml
+
+          # Update agent-package.json version
+          jq --arg v "$VERSION" '.metadata.version = $v' agent-package.json > agent-package.json.tmp
+          mv agent-package.json.tmp agent-package.json
+
+          # Update template.manifest.json version (if present)
+          if [ -f template.manifest.json ]; then
+            TMP=$(mktemp)
+            jq --arg v "$VERSION" '.version = $v' template.manifest.json > "$TMP"
+            mv "$TMP" template.manifest.json
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml agent-package.json template.manifest.json
+          git commit -m "chore(release): sync python version to ${VERSION} [skip ci]"
+          git push origin HEAD:main
+
+      - name: Build and package
+        working-directory: packages/template-python
+        run: bash scripts/package.sh
+
+      - name: Publish to S3
+        working-directory: packages/template-python
+        env:
+          NUWAX_S3_ENDPOINT: ${{ secrets.NUWAX_S3_ENDPOINT }}
+          NUWAX_S3_REGION: ${{ secrets.NUWAX_S3_REGION }}
+          NUWAX_S3_BUCKET: ${{ secrets.NUWAX_S3_BUCKET }}
+          NUWAX_S3_ACCESS_KEY_ID: ${{ secrets.NUWAX_S3_ACCESS_KEY_ID }}
+          NUWAX_S3_SECRET_ACCESS_KEY: ${{ secrets.NUWAX_S3_SECRET_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.NUWAX_S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.NUWAX_S3_SECRET_ACCESS_KEY }}
+        run: bash scripts/publish-s3.sh
