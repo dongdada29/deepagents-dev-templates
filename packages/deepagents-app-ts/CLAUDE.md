@@ -15,7 +15,7 @@ This is a template project for building AI Agents using deepagents (JS/TS) that 
 - **ACP**: deepagents-acp (Agent Client Protocol server)
 - **Language**: TypeScript (strict mode, ES2022)
 - **Validation**: Zod schemas
-- **Package Manager**: npm
+- **Package Manager**: pnpm
 
 ## Code Conventions
 - Use ES modules (import/export), not CommonJS (require)
@@ -30,12 +30,12 @@ This is a template project for building AI Agents using deepagents (JS/TS) that 
 - Unit tests: `tests/unit/`
 - ACP smoke tests: `tests/acp-smoke/`
 - Integration tests: `tests/integration/`
-- Run with: `npm test`
+- Run with: `pnpm test`
 
 ## Build & Run
-- `npm run build` — compile to dist/
-- `npm run dev` — development mode with tsx
-- `npm start` — production mode from dist/
-- `npm run start:acp` — start ACP server explicitly
-- `npm run inspect` — inspect the agent orchestration spec (dry-run)
-- `npm run inspect -- --full` — full inspection with LangGraph runtime topology (requires model credentials)
+- `pnpm run build` — compile to dist/
+- `pnpm run dev` — development mode with tsx
+- `pnpm start` — production mode from dist/
+- `pnpm run start:acp` — start ACP server explicitly
+- `pnpm run inspect` — inspect the agent orchestration spec (dry-run)
+- `pnpm run inspect -- --full` — full inspection with LangGraph runtime topology (requires model credentials)

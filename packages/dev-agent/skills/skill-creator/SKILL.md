@@ -52,6 +52,8 @@ version: "1.0.0"
 // 具体代码示例
 ```
 
+<!-- TODO (Python): 补充 Python 代码示例块 `python` -->
+
 ## 常见问题
 | 问题 | 原因 | 解决 |
 |------|------|------|
@@ -91,3 +93,7 @@ version: "1.0.0"
 - ✅ description 用"当...时使用"的句式
 - ✅ 每个步骤都有具体操作
 - ✅ 包含代码示例和故障排除
+
+---
+
+> **TODO (Python)**：本技能的目录约定、YAML frontmatter 规范和渐进加载机制在 TS/Python 模板中一致。示例代码块需同时提供 `typescript` 和 `python` 版本。

@@ -2,7 +2,7 @@
 name: acp-smoke-test
 description: "开发阶段用 rcoder-cli 在本地启动 ACP Agent 并发送消息，快速验证改动是否可运行"
 tags: [rcoder, acp, env, dev, smoke-test]
-version: "1.0.0"
+version: "2.0.0"
 ---
 
 # 开发阶段 ACP 运行测试
@@ -20,14 +20,15 @@ version: "1.0.0"
 ## 前提
 
 ```bash
-npm install -g rcoder-cli   # 仅需安装一次
-rcoder-cli --version        # 确认安装成功
+pnpm dlx rcoder-cli --version   # 无需全局安装，直接用
+# 或
+npx rcoder-cli --version
 ```
 
 ## 快速冒烟（最常用）
 
 ```bash
-rcoder-cli chat \
+pnpm dlx rcoder-cli chat \
   -c "node dist/bundle.mjs" \
   -w . \
   -p "hello" \
@@ -39,7 +40,7 @@ rcoder-cli chat \
 或直接：
 
 ```bash
-npm run smoke:acp
+pnpm run smoke:acp
 ```
 
 agent 有响应、exit 0 即说明本次改动没有破坏启动流程。
@@ -49,7 +50,7 @@ agent 有响应、exit 0 即说明本次改动没有破坏启动流程。
 想多轮对话验证某个功能时：
 
 ```bash
-rcoder-cli tui -c "node dist/bundle.mjs" -w .
+pnpm dlx rcoder-cli tui -c "node dist/bundle.mjs" -w .
 ```
 
 进入全屏 TUI，直接和 agent 对话，和生产环境 rcoder 体验一致。
@@ -65,5 +66,9 @@ rcoder-cli tui -c "node dist/bundle.mjs" -w .
 加 `-vv` 看详细日志：
 
 ```bash
-rcoder-cli chat -c "node dist/bundle.mjs" -w . -p "hello" -vv
+pnpm dlx rcoder-cli chat -c "node dist/bundle.mjs" -w . -p "hello" -vv
 ```
+
+---
+
+> **TODO (Python)**：本文档为 TypeScript 模板专用。Python 模板使用 `uv run deepagents-app-py` 作为 agent 入口，ACP smoke test 命令需调整为 `pnpm dlx rcoder-cli chat -c "uv run deepagents-app-py" -w .`。需补充 Python 版冒烟测试流程。

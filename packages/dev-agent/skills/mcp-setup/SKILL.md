@@ -17,8 +17,8 @@ version: "1.0.0"
 {
   "servers": {
     "context7": {
-      "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"],
+      "command": "pnpm",
+      "args": ["dlx", "@upstash/context7-mcp"],
       "description": "查询最新框架/API 文档"
     }
   }
@@ -31,8 +31,8 @@ version: "1.0.0"
 ```json
 {
   "my-server": {
-    "command": "npx",
-    "args": ["-y", "@my-org/mcp-server"],
+    "command": "pnpm",
+    "args": ["dlx", "@my-org/mcp-server"],
     "env": {
       "API_KEY": "${AGENT_VAR_MY_API_KEY}"
     },
@@ -111,3 +111,7 @@ MCP 配置中支持 `${AGENT_VAR_XXX}` 占位符：
 - ✅ 使用 agent_variable 管理敏感配置
 - ✅ 测试每个 MCP 服务器的连接
 - ✅ 记录 MCP 配置变更原因
+
+---
+
+> **TODO (Python)**：Python 项目 MCP stdio 服务器推荐使用 `uvx` 替代 `pnpm dlx`，如 `"command": "uvx", "args": ["mcp-server-xxx"]`。其余 MCP JSON 配置结构、合并策略、变量插值逻辑在 Python 模板中一致。

@@ -5,13 +5,14 @@
   "workspaces": [
     "packages/*"
   ],
+  "packageManager": "pnpm@9.15.5",
   "scripts": {
-    "build": "npm run build -w packages/deepagents-app-ts",
-    "test": "npm test -w packages/deepagents-app-ts",
-    "dev": "npm run dev -w packages/deepagents-app-ts",
-    "typecheck": "npm run typecheck -w packages/deepagents-app-ts",
-    "graph": "npm run graph -w packages/deepagents-app-ts",
-    "inspect": "npm run inspect -w packages/inspector"
+    "build": "pnpm --filter deepagents-app-ts build",
+    "test": "pnpm --filter deepagents-app-ts test",
+    "dev": "pnpm --filter deepagents-app-ts dev",
+    "typecheck": "pnpm --filter deepagents-app-ts typecheck",
+    "graph": "pnpm --filter deepagents-app-ts graph",
+    "inspect": "pnpm --filter inspector inspect --"
   },
   "description": "DeepAgents development templates — monorepo for agent template and dev-agent config",
   "license": "MIT"

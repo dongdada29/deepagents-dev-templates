@@ -22,6 +22,22 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PKG_DIR"
 
+# ─── Ensure dependencies are installed ───
+# If node_modules is missing (or stale), install via pnpm before building.
+# We detect pnpm on PATH; fall back to npm if unavailable.
+if ! node -e "require('esbuild')" 2>/dev/null; then
+  if command -v pnpm >/dev/null 2>&1; then
+    log "Installing dependencies with pnpm …"
+    run pnpm install --frozen-lockfile 2>/dev/null || run pnpm install
+  elif command -v npm >/dev/null 2>&1; then
+    log "Installing dependencies with npm …"
+    run npm install
+  else
+    err "Neither pnpm nor npm found on PATH; cannot install dependencies"
+    exit 1
+  fi
+fi
+
 # macOS bsdtar: don't embed AppleDouble (._*) / xattr cruft in the tarball.
 export COPYFILE_DISABLE=1
 

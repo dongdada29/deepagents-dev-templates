@@ -100,8 +100,8 @@ export function createTools(ctx: ToolContext): StructuredTool[] {
 3. **禁止**在代码中硬编码任何密钥
 
 ### Step 5: 验证
-1. `npm run build` — 确认编译通过
-2. `npm run typecheck` — 确认类型正确
+1. `pnpm run build` — 确认编译通过
+2. `pnpm run typecheck` — 确认类型正确
 3. 检查没有 `any` 类型
 4. 检查所有导入路径带 `.js` 后缀
 
@@ -134,3 +134,7 @@ export function createTools(ctx: ToolContext): StructuredTool[] {
 - ✅ 先查平台，确认无方案再写
 - ✅ 用 agent_variable 管理密钥
 - ✅ 参考 _example.tool.ts 的结构
+
+---
+
+> **TODO (Python)**：本文档为 TypeScript 模板专用。Python 模板工具使用 `@tool` 装饰器 + pydantic schema，文件路径 `src/deepagents_app_py/app/tools/{name}_tool.py`，注册在 `tools/__init__.py`。验证命令为 `uv run ruff check .` + `uv run pyright`。需补充 Python 版工具创建流程。

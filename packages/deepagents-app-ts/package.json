@@ -20,7 +20,7 @@
     "deepagents-app-ts": "dist/index.js"
   },
   "scripts": {
-    "build": "npm run codegen:config-schema && tsc && tsc-alias",
+    "build": "pnpm run codegen:config-schema && tsc && tsc-alias",
     "dev": "tsx watch --tsconfig tsconfig.json src/index.ts",
     "dev:repl": "tsx watch --tsconfig tsconfig.json src/index.ts chat",
     "dev:once": "tsx --tsconfig tsconfig.json src/index.ts",
@@ -39,7 +39,7 @@
     "test:watch": "vitest",
     "test:unit": "vitest run tests/unit",
     "test:acp-smoke": "vitest run tests/acp-smoke",
-    "test:bundle-smoke": "npm run bundle && BUNDLE_SMOKE=1 vitest run tests/bundle-smoke",
+    "test:bundle-smoke": "pnpm run bundle && BUNDLE_SMOKE=1 vitest run tests/bundle-smoke",
     "test:integration": "vitest run tests/integration --passWithNoTests",
     "lint": "eslint .",
     "format": "prettier --write .",
@@ -51,8 +51,8 @@
     "package:nuwax": "bash scripts/package.sh --format all",
     "package:platforms": "bash scripts/package-platforms.sh",
     "validate:package": "bash scripts/validate-package.sh",
-    "smoke:acp": "npx rcoder-cli chat -c 'node dist/bundle.mjs' -w . -p 'hello' --timeout 30 --mode yolo -q",
-    "inspect": "npm run inspect -w inspector --"
+    "smoke:acp": "pnpm dlx rcoder-cli chat -c 'node dist/bundle.mjs' -w . -p 'hello' --timeout 30 --mode yolo -q",
+    "inspect": "pnpm --filter inspector inspect --"
   },
   "dependencies": {
     "@langchain/anthropic": "^1.4.0",

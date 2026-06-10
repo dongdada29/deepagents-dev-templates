@@ -102,8 +102,8 @@ agent_variable(operation: "list")
 ```json
 {
   "weather-mcp": {
-    "command": "npx",
-    "args": ["-y", "@weather/mcp-server"],
+    "command": "pnpm",
+    "args": ["dlx", "@weather/mcp-server"],
     "env": {
       "API_KEY": "${AGENT_VAR_WEATHER_API_KEY}"
     }
@@ -128,3 +128,7 @@ agent_variable(operation: "list")
 - ✅ 用 agent_variable 创建，用户在 UI 填写
 - ✅ 命名用 UPPER_SNAKE_CASE
 - ✅ description 说明获取方式和用途
+
+---
+
+> **TODO (Python)**：本文档核心概念（变量类型、命名规范、生命周期）在 Python 模板中一致。代码示例需补充 Python 版：`os.environ["AGENT_VAR_XXX"]` 替代 `process.env.AGENT_VAR_XXX`，MCP 配置中 stdio 服务器使用 `uvx` 替代 `pnpm dlx`。
