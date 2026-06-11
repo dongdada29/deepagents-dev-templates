@@ -16,7 +16,7 @@ describe("code graph", () => {
     expect(nodeIds).toContain("runtime:code-graph");
     expect(nodeIds).toContain("runtime:harness-lifecycle");
     expect(nodeIds).toContain("tool:platform-api");
-    expect(nodeIds).toContain("tool:mcp-bridge");
+    expect(nodeIds).toContain("tool:mcp-tool-loader");
     expect(nodeIds).toContain("config:mcp");
     expect(nodeIds).toContain("manifest:package");
     expect(nodeIds).toContain("skill:platform-tool-selection");

@@ -14,6 +14,7 @@ import { MCPManager } from "./platform/mcp-manager.js";
 import { VariableManager } from "./platform/variable-manager.js";
 import { createTools, type ToolContext } from "../app/tools/index.js";
 import { logger } from "./logger.js";
+import { loadMcpTools } from "./platform/mcp-tool-loader.js";
 
 /**
  * The set of runtime components that tools and the agent depend on.
@@ -26,7 +27,10 @@ export interface RuntimeContext {
   mcpManager: MCPManager;
   variableManager: VariableManager;
   toolContext: ToolContext;
+  /** Builtin tools created from the tool registry */
   tools: StructuredTool[];
+  /** MCP tools loaded from configured MCP servers (native LangChain tools) */
+  mcpTools: StructuredTool[];
 }
 
 /**
@@ -108,11 +112,11 @@ export function createRuntimeContext(
     tools: tools.length,
   });
 
-  return { config, platformClient, mcpManager, variableManager, toolContext, tools };
+  return { config, platformClient, mcpManager, variableManager, toolContext, tools, mcpTools: [] };
 }
 
 /**
- * Hydrate async runtime layers that depend on platform APIs.
+ * Hydrate async runtime layers: platform MCP config + MCP native tool loading.
  *
  * The custom MCP bridge holds a reference to the MCPManager, so it is safe to
  * populate platform MCP config after tool objects are created and before the
@@ -120,20 +124,29 @@ export function createRuntimeContext(
  */
 export async function hydrateRuntimeContext(context: RuntimeContext): Promise<RuntimeContext> {
   const log = logger.child("runtime-context");
-  if (!context.platformClient) {
-    return context;
-  }
 
-  try {
-    const platformMcp = await context.platformClient.listMcpServers();
-    if (Object.keys(platformMcp.servers).length > 0) {
-      context.mcpManager.setPlatformConfig(platformMcp);
-      log.info("Hydrated platform MCP config", {
-        servers: Object.keys(platformMcp.servers),
+  // Hydrate platform MCP config if platform client is available
+  if (context.platformClient) {
+    try {
+      const platformMcp = await context.platformClient.listMcpServers();
+      if (Object.keys(platformMcp.servers).length > 0) {
+        context.mcpManager.setPlatformConfig(platformMcp);
+        log.info("Hydrated platform MCP config", {
+          servers: Object.keys(platformMcp.servers),
+        });
+      }
+    } catch (err) {
+      log.warn("Failed to hydrate platform MCP config; continuing with default/session MCP only", {
+        error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  // Load MCP native tools from all configured servers
+  try {
+    context.mcpTools = await loadMcpTools(context.mcpManager);
   } catch (err) {
-    log.warn("Failed to hydrate platform MCP config; continuing with default/session MCP only", {
+    log.warn("Failed to load MCP tools; continuing with builtin tools only", {
       error: err instanceof Error ? err.message : String(err),
     });
   }

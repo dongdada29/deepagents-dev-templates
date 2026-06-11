@@ -5,8 +5,13 @@
  * Each tool is built with @langchain/core/tools `tool()` helper so it's
  * fully compatible with deepagents' tool system.
  *
- * The platform-bound tools (platform_api, agent_variable, mcp_tool_bridge)
+ * The platform-bound tools (platform_api, agent_variable)
  * are created by createTools() which receives the runtime context.
+ *
+ * MCP tools are loaded separately via `loadMcpTools()` in
+ * `runtime/platform/mcp-tool-loader.ts` and merged with the builtin tools
+ * at agent-creation time. They are registered as native LangChain tools
+ * so the agent calls them directly by name — no bridge indirection needed.
  */
 
 import type { StructuredTool } from "@langchain/core/tools";
@@ -17,7 +22,6 @@ import { conversationHistoryTool } from "./conversation-history.tool.js";
 import { checkpointTool } from "./checkpoint.tool.js";
 import { createPlatformApiTool } from "./platform-api.tool.js";
 import { createAgentVariableTool } from "./agent-variable.tool.js";
-import { createMcpBridgeTool } from "./mcp-bridge.tool.js";
 import { createRuntimeInfoTool } from "./runtime-info.tool.js";
 import type { PlatformClient } from "../../runtime/platform/platform-client.js";
 import type { MCPManager } from "../../runtime/platform/mcp-manager.js";
@@ -32,9 +36,12 @@ export interface ToolContext {
 }
 
 /**
- * Create the full list of custom tools for the agent.
+ * Create the full list of custom builtin tools for the agent.
  * Called from agent-factory at agent creation time so tools
  * can be bound to live runtime instances.
+ *
+ * MCP tools are NOT included here — they are loaded separately
+ * via `loadMcpTools()` and passed as `mcpTools` to `buildAgentConfigParts()`.
  */
 export function createTools(ctx: ToolContext): StructuredTool[] {
   return [
@@ -49,6 +56,5 @@ export function createTools(ctx: ToolContext): StructuredTool[] {
     // Platform-bound tools (created with live context)
     createPlatformApiTool(ctx.platformClient),
     createAgentVariableTool(ctx.variableManager),
-    createMcpBridgeTool(ctx.mcpManager),
   ];
 }

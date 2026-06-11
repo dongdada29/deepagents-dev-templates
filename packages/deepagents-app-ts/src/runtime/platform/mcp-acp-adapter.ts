@@ -55,8 +55,9 @@ export function convertAcpMcpServers(
     if (!name || typeof name !== "string") continue;
 
     if ("type" in server && (server.type === "http" || server.type === "sse")) {
-      // HTTP/SSE — mcp-bridge currently only supports stdio, so warn
-      log.warn("HTTP/SSE MCP server not supported by mcp-bridge, skipping", {
+      // HTTP/SSE — @langchain/mcp-adapters supports all transports,
+      // but MCPManager only stores command/url; tool loader handles the rest.
+      log.warn("HTTP/SSE MCP server not yet tested with MCPManager config format, skipping", {
         name,
         type: server.type,
       });

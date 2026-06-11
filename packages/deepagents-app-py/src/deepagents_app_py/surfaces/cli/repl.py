@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from typing import Any
 
@@ -16,7 +17,12 @@ from deepagents_app_py.runtime.slash_commands.types import CommandContext
 
 
 def start_repl(options: Any = None) -> None:
-    """Start an interactive REPL session."""
+    """Start an interactive REPL session (sync entry point)."""
+    asyncio.run(_start_repl_async(options))
+
+
+async def _start_repl_async(options: Any = None) -> None:
+    """Async REPL core."""
     console = Console()
     console.print(
         Panel.fit("[bold cyan]DeepAgents Interactive REPL[/bold cyan]", border_style="cyan")
@@ -45,7 +51,7 @@ def start_repl(options: Any = None) -> None:
 
     ws = getattr(options, "workspace_root", None) or _os.getcwd()
     config = loadConfig({"workspaceRoot": ws, "configPath": getattr(options, "config_path", None)})
-    graph = build_graph(config, None, ws, collect_tools(), checkpointer=MemorySaver())
+    graph = await build_graph(config, None, ws, collect_tools(), checkpointer=MemorySaver())
     thread = {"configurable": {"thread_id": "repl"}}
 
     try:

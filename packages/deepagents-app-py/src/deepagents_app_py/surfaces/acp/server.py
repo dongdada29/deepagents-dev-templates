@@ -44,6 +44,7 @@ def bootstrap(
         log.info("Loaded ACP session config from environment")
 
     # Agent factory — rebuilds a deepagents graph per session / model switch.
+    # Pass None for server_instance here; it will be set after server creation.
     factory = build_acp_agent_factory(config, ws, session_config=session_config)
 
     # Single-entry model list (the model selector advertised to the ACP client).
@@ -72,6 +73,12 @@ def bootstrap(
         server_name=config.agent.name or "deepagents-app-py",
         server_version=getattr(config.agent, "version", None) or pkg_version,
     )
+
+    # Wire the server instance into the factory so it can read session MCP servers.
+    factory = build_acp_agent_factory(
+        config, ws, server_instance=server, session_config=session_config
+    )
+    server._agent = factory  # noqa: SLF001 — update the factory on the existing server
 
     log.info(
         "Starting ACP server",

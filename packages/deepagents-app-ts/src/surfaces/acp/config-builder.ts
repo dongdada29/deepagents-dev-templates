@@ -47,7 +47,7 @@ function assembleAcpAgentConfig(
     name: config.agent.name,
     description: config.agent.description,
     commands: getAcpSlashCommandSpecs(),
-    ...buildAgentConfigParts(config, sessionConfig, workspaceRoot, runtimeCtx.tools),
+    ...buildAgentConfigParts(config, sessionConfig, workspaceRoot, runtimeCtx.tools, runtimeCtx.mcpTools),
     interruptOn: {},
   } as unknown as DeepAgentConfig;
 

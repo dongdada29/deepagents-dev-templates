@@ -81,6 +81,24 @@ def resolve_skills_paths(config: AppConfig) -> list[str]:
     return [str((base / p).resolve()) for p in (config.skills.directories or [])]
 
 
+def format_skills_summary(skills: list[Any]) -> str:
+    """Format discovered skills as a compact summary for the system prompt.
+
+    Progressive-loading style: only ``name``, ``description``, ``tags`` are
+    included. The full skill body is loaded on demand.
+    """
+    if not skills:
+        return ""
+    lines: list[str] = []
+    for skill in skills:
+        tags = getattr(skill, "tags", []) or []
+        tag_str = f" [{', '.join(tags)}]" if tags else ""
+        desc = getattr(skill, "description", "") or ""
+        name = getattr(skill, "name", "") or "?"
+        lines.append(f"- **{name}**{tag_str}: {desc}")
+    return "\n".join(lines)
+
+
 def discover_sub_agents(config: AppConfig, workspace_root: Path | str) -> list[dict[str, Any]]:
     """Return sub-agent specs discovered under the configured ``agentsDirectories``."""
     from deepagents_app_py.runtime.discovery import discover_sub_agents as _discover

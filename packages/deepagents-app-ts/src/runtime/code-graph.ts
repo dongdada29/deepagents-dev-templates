@@ -222,7 +222,7 @@ export function generateCodeGraph(root = process.cwd()): CodeGraph {
     ["tool:json-utils", "JSON utils tool", "src/app/tools/json-utils.tool.ts"],
     ["tool:platform-api", "Platform API tool", "src/app/tools/platform-api.tool.ts"],
     ["tool:agent-variable", "Agent variable tool", "src/app/tools/agent-variable.tool.ts"],
-    ["tool:mcp-bridge", "MCP bridge tool", "src/app/tools/mcp-bridge.tool.ts"],
+    ["tool:mcp-tool-loader", "MCP tool loader", "src/runtime/platform/mcp-tool-loader.ts"],
   ] as const) {
     addIfExists(nodes, root, {
       id,
@@ -300,7 +300,7 @@ export function generateCodeGraph(root = process.cwd()): CodeGraph {
     { from: "runtime:helpers", to: "tool:json-utils", kind: "loads" },
     { from: "runtime:helpers", to: "tool:platform-api", kind: "loads" },
     { from: "runtime:helpers", to: "tool:agent-variable", kind: "loads" },
-    { from: "runtime:helpers", to: "tool:mcp-bridge", kind: "loads" },
+    { from: "runtime:helpers", to: "tool:mcp-tool-loader", kind: "loads" },
     { from: "runtime:config-loader", to: "config:app", kind: "loads" },
     { from: "runtime:mcp-manager", to: "config:mcp", kind: "loads" },
     { from: "runtime:platform-client", to: "config:platform", kind: "configures" },

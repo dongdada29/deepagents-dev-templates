@@ -39,6 +39,7 @@ export function buildAgentConfigParts(
   sessionConfig: ACPSessionConfig | undefined,
   workspaceRoot: string,
   tools: StructuredTool[],
+  mcpTools: StructuredTool[] = [],
   backend?: AnyBackendProtocol,
   /**
    * Checkpointing strategy. Pass `false` for one-shot / REPL invocations
@@ -168,7 +169,7 @@ Before making any changes, you MUST:
   return {
     model: resolveModel(config),
     systemPrompt,
-    tools,
+    tools: [...tools, ...mcpTools],
     skills: resolveSkillsPaths(config),
     // When backend is provided, memory is handled by explicit middleware above.
     // Otherwise, fall back to the shortcut parameter (no addCacheControl).

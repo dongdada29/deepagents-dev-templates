@@ -77,9 +77,9 @@ export function createAppAgent(
   // 2. FilesystemBackend
   const backend = new FilesystemBackend({ rootDir: workspaceRoot });
 
-  // 3. Build agent config using shared helper
+  // 3. Build agent config using shared helper (no MCP tools in sync path)
   const agentConfig = buildAgentConfigParts(
-    config, sessionConfig, workspaceRoot, context.tools, backend, options.checkpointer
+    config, sessionConfig, workspaceRoot, context.tools, [], backend, options.checkpointer
   );
 
   // 4. Create the deep agent
@@ -113,12 +113,13 @@ export async function createAppAgentAsync(
   const context = await createRuntimeContextAsync(config, sessionConfig, workspaceRoot);
   log.info("Custom tools ready", {
     count: context.tools.length,
+    mcpTools: context.mcpTools.length,
     names: context.tools.map((t) => t.name),
   });
 
   const backend = new FilesystemBackend({ rootDir: workspaceRoot });
   const agentConfig = buildAgentConfigParts(
-    config, sessionConfig, workspaceRoot, context.tools, backend, options.checkpointer
+    config, sessionConfig, workspaceRoot, context.tools, context.mcpTools, backend, options.checkpointer
   );
   const agent = (createDeepAgent as unknown as (params: unknown) => unknown)({
     ...agentConfig,
