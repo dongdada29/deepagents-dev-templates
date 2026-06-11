@@ -17,12 +17,7 @@ from deepagents_app_py.runtime.slash_commands.types import CommandContext
 
 
 def start_repl(options: Any = None) -> None:
-    """Start an interactive REPL session (sync entry point)."""
-    asyncio.run(_start_repl_async(options))
-
-
-async def _start_repl_async(options: Any = None) -> None:
-    """Async REPL core."""
+    """Start an interactive REPL session."""
     console = Console()
     console.print(
         Panel.fit("[bold cyan]DeepAgents Interactive REPL[/bold cyan]", border_style="cyan")
@@ -46,12 +41,14 @@ async def _start_repl_async(options: Any = None) -> None:
     from langgraph.checkpoint.memory import MemorySaver
 
     from deepagents_app_py.app.tools import collect_tools
-    from deepagents_app_py.runtime.agent_config import build_graph
+    from deepagents_app_py.runtime.agent_config import build_graph_with_mcp
     from deepagents_app_py.runtime.config.config_loader import loadConfig
 
     ws = getattr(options, "workspace_root", None) or _os.getcwd()
     config = loadConfig({"workspaceRoot": ws, "configPath": getattr(options, "config_path", None)})
-    graph = await build_graph(config, None, ws, collect_tools(), checkpointer=MemorySaver())
+    graph = asyncio.run(
+        build_graph_with_mcp(config, None, ws, collect_tools(), checkpointer=MemorySaver())
+    )
     thread = {"configurable": {"thread_id": "repl"}}
 
     try:

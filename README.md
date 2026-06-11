@@ -6,23 +6,49 @@ Monorepo for building, inspecting, and distributing DeepAgents AI applications.
 
 | Package | Description |
 |---|---|
-| [`packages/deepagents-app-ts`](./packages/deepagents-app-ts/) | DeepAgents application template — ACP server, tools, skills, config, distribution |
-| [`packages/inspector`](./packages/inspector/) | Read-only orchestration visualizer — inspect agent structure, middleware chain, and LangGraph topology |
+| [`packages/deepagents-app-ts`](./packages/deepagents-app-ts/) | TypeScript application template — ACP server, tools, skills, config, distribution |
+| [`packages/deepagents-app-py`](./packages/deepagents-app-py/) | Python application template — LangGraph + deepagents, ACP server, REPL |
+| [`packages/inspector`](./packages/inspector/) | Orchestration visualizer — inspect agent structure, middleware chain, and LangGraph topology |
 | [`packages/dev-agent`](./packages/dev-agent/) | Developer agent config and skills |
 
 ## Quick Start
 
 ```bash
-npm install
-npm run build -w packages/deepagents-app-ts
+# Install dependencies (requires pnpm 9+)
+pnpm install
+
+# Build TypeScript template
+pnpm --filter deepagents-app-ts build
+
+# Build Python template (requires uv)
+cd packages/deepagents-app-py && uv sync
 ```
 
 ## Scripts
 
 | Command | Description |
 |---|---|
-| `npm run build` | Build template |
-| `npm test` | Run template tests |
-| `npm run graph` | Generate code relationship graph |
-| `npm run inspect` | Inspect agent orchestration (dry-run by default) |
-| `npm run inspect -- --full` | Full inspection with LangGraph runtime topology |
+| `pnpm build` | Build TypeScript template |
+| `pnpm test` | Run TypeScript template tests |
+| `pnpm graph` | Generate code relationship graph |
+| `pnpm inspect` | Inspect agent orchestration (dry-run by default) |
+| `pnpm inspect -- --full` | Full inspection with LangGraph runtime topology |
+
+## Development
+
+```bash
+# TypeScript template
+pnpm --filter deepagents-app-ts dev    # Development mode
+pnpm --filter deepagents-app-ts test   # Run tests
+pnpm --filter deepagents-app-ts lint   # Lint code
+
+# Python template
+cd packages/deepagents-app-py
+uv run deepagents-app-py chat          # Interactive REPL
+uv run pytest                          # Run tests
+uv run ruff check .                    # Lint code
+```
+
+## License
+
+MIT

@@ -23,28 +23,30 @@ def build_acp_agent_factory(
     workspace_root: str,
     server_instance: Any = None,
     session_config: Any | None = None,
+    mcp_tools: list[Any] | None = None,
 ) -> Any:
-    """Return an async factory ``(AgentSessionContext) -> CompiledStateGraph``.
+    """Return a sync factory ``(AgentSessionContext) -> CompiledStateGraph``.
 
     The factory honors the per-session model override (``ctx.model`` is a
     ``"provider:model-name"`` string), so switching models in the ACP client
     actually rebuilds the agent with the new model.
 
-    *server_instance* is the ``DeepAgentsAppServer`` instance. The factory
-    reads ``server_instance._session_mcp_servers`` to pick up MCP servers
-    forwarded by ``session_lifecycle.py``'s ``new_session()`` override. The
-    upstream ``AgentSessionContext`` dataclass has no ``mcp_servers`` field,
-    so we cannot pass them through ``ctx``.
+    *mcp_tools* are pre-loaded MCP tools (loaded once at bootstrap via
+    ``load_mcp_tools_from_config``) so the sync factory can include them
+    without needing async.
+
+    *server_instance* is the ``DeepAgentsAppServer`` — the factory reads
+    ``server_instance._session_mcp_servers`` for per-session MCP overrides.
     """
-    from deepagents_app_py.runtime.agent_config import build_agent_config_parts
+    from deepagents import create_deep_agent
+
+    from deepagents_app_py.app.tools import collect_tools
 
     base_model_str = f"{config.model.provider}:{config.model.name}"
+    builtin_tools = collect_tools()
+    preloaded_mcp = mcp_tools or []
 
-    async def build_agent(ctx: Any) -> Any:
-        from deepagents import create_deep_agent
-
-        from deepagents_app_py.app.tools import collect_tools
-
+    def build_agent(ctx: Any) -> Any:
         cwd = getattr(ctx, "cwd", None) or workspace_root
         cfg = config
 
@@ -60,20 +62,12 @@ def build_acp_agent_factory(
                 log.warn("Could not apply session model override", model=model_override)
                 cfg = config
 
-        # Collect session-level MCP servers from the server instance.
-        # The upstream AgentSessionContext has no mcp_servers field, so we
-        # read from the server instance where session_lifecycle.py stores them.
-        session_mcp_servers: dict[str, Any] | None = None
-        if server_instance and hasattr(server_instance, "_session_mcp_servers"):
-            session_mcp_servers = server_instance._session_mcp_servers
+        all_tools = builtin_tools + preloaded_mcp
 
-        parts = await build_agent_config_parts(
-            cfg,
-            session_config,
-            cwd,
-            collect_tools(),
-            session_mcp_servers=session_mcp_servers,
-        )
+        # Build config parts synchronously (MCP tools already pre-loaded).
+        from deepagents_app_py.runtime.agent_config import build_agent_config_parts
+
+        parts = build_agent_config_parts(cfg, session_config, cwd, all_tools)
         return create_deep_agent(**parts)
 
     return build_agent

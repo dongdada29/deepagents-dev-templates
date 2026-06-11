@@ -39,16 +39,19 @@ _PLAN_PREAMBLE = (
 )
 
 
-async def build_agent_config_parts(
+def build_agent_config_parts(
     config: AppConfig,
     session_config: ACPSessionConfig | None,
     workspace_root: Path | str,
     tools: list[Any],
     *,
-    session_mcp_servers: dict[str, Any] | None = None,
     checkpointer: Any = None,
 ) -> dict[str, Any]:
     """Compose the keyword arguments for ``deepagents.create_deep_agent(**parts)``.
+
+    This is the **sync** variant — MCP tools should be pre-loaded and included
+    in *tools* before calling this. The async CLI surfaces can use
+    ``build_graph()`` which handles MCP loading internally.
 
     Returns a dict with keys: ``model``, ``system_prompt``, ``tools``,
     ``middleware``, ``subagents``, ``skills``, ``memory``, ``permissions``,
@@ -112,17 +115,10 @@ async def build_agent_config_parts(
             for sub in raw_subagents
         ]
 
-    # ── MCP tools (native LangChain tools from MCP servers) ───────────
-    from deepagents_app_py.app.tools.mcp_bridge import collect_mcp_servers, load_mcp_tools
-
-    mcp_servers = collect_mcp_servers(config, session_mcp_servers)
-    mcp_tools = await load_mcp_tools(mcp_servers)
-    all_tools = list(tools) + mcp_tools
-
     parts: dict[str, Any] = {
         "model": resolve_model(config),
         "system_prompt": system_prompt,
-        "tools": all_tools,
+        "tools": tools,
         "middleware": middleware,
         "subagents": subagents,
         "skills": skills_paths or None,
@@ -138,35 +134,53 @@ async def build_agent_config_parts(
         model=config.model.name,
         provider=config.model.provider,
         mode=mode,
-        builtin_tools=len(tools),
-        mcp_tools=len(mcp_tools),
-        mcp_servers=list(mcp_servers.keys()),
-        skills=len(skills_paths),
+        tools=len(tools),
         subagents=len(subagents) if subagents else 0,
+        skills=len(skills_paths),
         middleware=len(middleware),
     )
 
     return parts
 
 
-async def build_graph(
+def build_graph(
     config: AppConfig,
     session_config: ACPSessionConfig | None,
     workspace_root: Path | str,
     tools: list[Any],
     *,
-    session_mcp_servers: dict[str, Any] | None = None,
     checkpointer: Any = None,
 ) -> Any:
-    """Build a compiled deepagents graph from config (shared by ACP + CLI surfaces)."""
+    """Build a compiled deepagents graph from config (sync, for ACP factory)."""
     from deepagents import create_deep_agent
 
-    parts = await build_agent_config_parts(
-        config,
-        session_config,
-        workspace_root,
-        tools,
-        session_mcp_servers=session_mcp_servers,
-        checkpointer=checkpointer,
+    return create_deep_agent(
+        **build_agent_config_parts(
+            config, session_config, workspace_root, tools, checkpointer=checkpointer
+        )
+    )
+
+
+async def build_graph_with_mcp(
+    config: AppConfig,
+    session_config: ACPSessionConfig | None,
+    workspace_root: Path | str,
+    tools: list[Any],
+    *,
+    checkpointer: Any = None,
+) -> Any:
+    """Build graph with async MCP tool loading (for CLI surfaces)."""
+    import asyncio
+
+    from deepagents import create_deep_agent
+
+    from deepagents_app_py.app.tools.mcp_bridge import collect_mcp_servers, load_mcp_tools
+
+    mcp_servers = collect_mcp_servers(config)
+    mcp_tools = await load_mcp_tools(mcp_servers)
+    all_tools = list(tools) + mcp_tools
+
+    parts = build_agent_config_parts(
+        config, session_config, workspace_root, all_tools, checkpointer=checkpointer
     )
     return create_deep_agent(**parts)

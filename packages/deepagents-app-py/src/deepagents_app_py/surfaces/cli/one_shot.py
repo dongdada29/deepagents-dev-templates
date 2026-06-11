@@ -26,13 +26,13 @@ def _message_text(content: Any) -> str:
     return str(content)
 
 
-async def _run_one_shot_async(prompt: str, options: Any = None) -> int:
-    """Async core of one-shot execution."""
+def run_one_shot(prompt: str, options: Any = None) -> int:
+    """Run a single prompt through the agent and print the final response."""
     log = logger.child("one-shot")
     log.info("Running one-shot prompt", prompt=prompt[:100])
 
     from deepagents_app_py.app.tools import collect_tools
-    from deepagents_app_py.runtime.agent_config import build_graph
+    from deepagents_app_py.runtime.agent_config import build_graph_with_mcp
     from deepagents_app_py.runtime.config.config_loader import loadConfig
 
     ws = getattr(options, "workspace_root", None) or os.getcwd()
@@ -41,7 +41,9 @@ async def _run_one_shot_async(prompt: str, options: Any = None) -> int:
     )
 
     # One-shot: no checkpointer (no thread to persist).
-    graph = await build_graph(config, None, ws, collect_tools(), checkpointer=False)
+    graph = asyncio.run(
+        build_graph_with_mcp(config, None, ws, collect_tools(), checkpointer=False)
+    )
 
     try:
         result = graph.invoke({"messages": [{"role": "user", "content": prompt}]})
@@ -53,11 +55,6 @@ async def _run_one_shot_async(prompt: str, options: Any = None) -> int:
     if messages:
         print(_message_text(messages[-1].content))
     return 0
-
-
-def run_one_shot(prompt: str, options: Any = None) -> int:
-    """Run a single prompt through the agent and print the final response."""
-    return asyncio.run(_run_one_shot_async(prompt, options))
 
 
 def run_prompt_file(file_path: str, options: Any = None) -> int:

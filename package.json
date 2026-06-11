@@ -12,7 +12,12 @@
     "dev": "pnpm --filter deepagents-app-ts dev",
     "typecheck": "pnpm --filter deepagents-app-ts typecheck",
     "graph": "pnpm --filter deepagents-app-ts graph",
-    "inspect": "pnpm --filter inspector inspect --"
+    "inspect": "pnpm --filter inspector inspect --",
+    "pack": "node scripts/pack-template.js",
+    "pack:ts": "node scripts/pack-template.js ts",
+    "pack:py": "node scripts/pack-template.js py",
+    "pack:all": "node scripts/pack-template.js all",
+    "pack:release": "node scripts/pack-template.js all --release"
   },
   "description": "DeepAgents development templates — monorepo for agent template and dev-agent config",
   "license": "MIT"

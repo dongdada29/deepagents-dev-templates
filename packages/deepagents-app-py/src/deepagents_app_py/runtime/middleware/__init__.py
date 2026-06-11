@@ -125,6 +125,31 @@ class StuckLoopMiddleware(AgentMiddleware):
                 )
         return handler(request)
 
+    async def awrap_tool_call(self, request: Any, handler: Any) -> Any:
+        name = (request.tool_call or {}).get("name", "") or ""
+        self._recent.append(name)
+        if (
+            len(self._recent) == self.threshold
+            and len(set(self._recent)) == 1
+            and name
+        ):
+            from deepagents_app_py.runtime.logger import logger
+
+            logger.child("stuck-loop").warn(
+                "Repeated identical tool call", tool=name, threshold=self.threshold
+            )
+            if self.mode == "error":
+                return ToolMessage(
+                    content=(
+                        f"[stuck-loop] '{name}' was called {self.threshold} times in a "
+                        "row. Stop repeating this call and try a different approach."
+                    ),
+                    tool_call_id=(request.tool_call or {}).get("id", ""),
+                    name=name,
+                    status="error",
+                )
+        return await handler(request)
+
 
 def should_evict(content: str, config: Any) -> bool:
     if not getattr(config, "enabled", True):
@@ -153,6 +178,20 @@ class EvictionMiddleware(AgentMiddleware):
 
     def wrap_tool_call(self, request: Any, handler: Any) -> Any:  # noqa: ARG002
         result = handler(request)
+        if (
+            isinstance(result, ToolMessage)
+            and isinstance(result.content, str)
+            and should_evict(result.content, self.config)
+        ):
+            result.content = create_preview(
+                result.content,
+                head_lines=getattr(self.config, "head_lines", 5),
+                tail_lines=getattr(self.config, "tail_lines", 5),
+            )
+        return result
+
+    async def awrap_tool_call(self, request: Any, handler: Any) -> Any:  # noqa: ARG002
+        result = await handler(request)
         if (
             isinstance(result, ToolMessage)
             and isinstance(result.content, str)
