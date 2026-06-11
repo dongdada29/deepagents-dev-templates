@@ -6,7 +6,8 @@ on:
     paths:
       - "packages/deepagents-app-ts/**"
       - "packages/inspector/**"
-      - "package-lock.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
   pull_request:
     paths:
       - "packages/deepagents-app-ts/**"
@@ -21,15 +22,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run typecheck -w packages/template
-      - run: npm run lint -w packages/template
-      - run: npm run build -w packages/template
-      - run: npm run graph -w packages/template
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter deepagents-app-ts typecheck
+      - run: pnpm --filter deepagents-app-ts lint
+      - run: pnpm --filter deepagents-app-ts build
+      - run: pnpm --filter deepagents-app-ts graph
 
   test:
     name: test · ${{ matrix.os }} · node ${{ matrix.node }}
@@ -41,15 +45,18 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-          cache: npm
-      - run: npm ci
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       # Unit + ACP smoke + integration. All run without LLM credentials:
       # acp-smoke uses a dummy key and exercises /config (no model call).
-      - run: npm test -w packages/template
+      - run: pnpm --filter deepagents-app-ts test
       # Builds the esbuild bundle, then boots dist/bundle.mjs over stdio —
       # cross-platform so a missing createRequire shim or unbundled CJS dep
       # surfaces here, not post-install on a client.
-      - run: npm run test:bundle-smoke -w packages/template
+      - run: pnpm --filter deepagents-app-ts test:bundle-smoke

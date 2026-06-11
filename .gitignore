@@ -39,6 +39,8 @@ coverage/
 *.tgz
 agent-package.release.json
 
+zip/
+
 logs/
 examples/
 .agent-checkpoints/
