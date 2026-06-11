@@ -100,43 +100,6 @@ def discover_sub_agents(config: AppConfig, workspace_root: Path | str) -> list[d
     return found
 
 
-def build_agent_config_parts(
-    config: AppConfig,
-    session_config: Any | None,
-    workspace_root: Path | str,
-    tools: list[Any],
-    backend: Any,
-    *,
-    checkpointer: Any | bool = True,
-) -> dict[str, Any]:
-    """Compose the config dict passed to pydantic-ai's ``Agent`` constructor."""
-    from deepagents_app_py.runtime.middleware import build_middleware
-
-    system_prompt = with_runtime_context_prompt(
-        resolve_system_prompt(config, session_config, workspace_root),
-        workspace_root,
-    )
-    if config.permissions.mode == "plan":
-        system_prompt = (
-            "## Planning Mode\n"
-            "Before making any changes, you MUST:\n"
-            "1. Present a clear plan of what you intend to do\n"
-            "2. Wait for user approval\n"
-            "3. Only then proceed with execution\n\n" + system_prompt
-        )
-
-    return {
-        "model": resolve_model_string(config),
-        "instructions": system_prompt,
-        "tools": tools,
-        "deps": None,
-        "middleware": build_middleware(config, str(workspace_root), backend),
-        "permissions": build_permissions(config, workspace_root),
-        "interrupt_on": build_interrupt_on(list(config.permissions.interrupt_on or [])),
-        "checkpointer": checkpointer,
-    }
-
-
 @dataclass
 class RuntimeContext:
     """Bundle of resources handed to the agent factory."""

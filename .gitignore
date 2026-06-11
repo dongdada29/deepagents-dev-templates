@@ -4,6 +4,13 @@ node_modules/
 # Build output
 dist/
 
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
 # Environment variables
 .env
 .env.local
