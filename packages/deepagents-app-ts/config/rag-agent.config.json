@@ -1,14 +1,26 @@
 {
   "rag": {
     "enabled": true,
-    "retrievalTools": ["chromadb-search", "brave-search"],
+    "retrievalTools": ["context7", "howtocook-mcp"],
+    "mcpServers": {
+      "howtocook-mcp": {
+        "command": "npx",
+        "args": ["-y", "howtocook-mcp"],
+        "enabled": true
+      },
+      "context7": {
+        "command": "npx",
+        "args": ["-y", "@upstash/context7-mcp"],
+        "enabled": true
+      }
+    },
     "rewrite": {
       "maxKeywords": 5,
       "intentCategories": ["factual", "how_to", "comparison", "latest", "explain"]
     },
     "retrieve": {
       "maxResults": 10,
-      "timeout_ms": 5000,
+      "timeout_ms": 10000,
       "retryCount": 1
     },
     "prepare": {
