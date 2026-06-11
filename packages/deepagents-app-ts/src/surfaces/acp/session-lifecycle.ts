@@ -45,7 +45,7 @@ import {
 import { buildACPAgentConfigWithMcpAsync } from "./config-builder.js";
 import { SessionManager } from "./session-manager.js";
 import { handleAcpSlashCommand, type AcpConnection } from "./slash-command-handler.js";
-import { createRAGHandler, createRAGHandlerConfig, RAGHandler } from "../../app/rag-handler.js";
+import { createRAGHandler, loadRAGConfigFromFile, RAGHandler } from "../../app/rag-handler.js";
 
 /** Per-session context the hooks need across the prompt lifecycle. */
 interface SessionContext {
@@ -102,9 +102,16 @@ export function createAcpSessionHooks(opts: AcpSessionHooksOptions): {
   // Create RAG handler if configured
   let ragHandler: RAGHandler | null = null;
   try {
-    ragHandler = createRAGHandler(opts.initialConfig);
-    if (ragHandler) {
-      log.info("RAG Handler created for ACP sessions");
+    const ragConfig = loadRAGConfigFromFile();
+    if (ragConfig && ragConfig.enabled) {
+      ragHandler = createRAGHandler(opts.initialConfig, ragConfig);
+      if (ragHandler) {
+        log.info("RAG Handler created for ACP sessions", {
+          tools: ragConfig.retrievalTools,
+        });
+      }
+    } else {
+      log.debug("RAG not configured or disabled");
     }
   } catch (err) {
     log.debug("RAG Handler not created", { error: String(err) });

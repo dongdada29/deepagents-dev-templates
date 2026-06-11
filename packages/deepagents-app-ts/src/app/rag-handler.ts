@@ -36,7 +36,7 @@ export function createRAGHandlerConfig(config: AppConfig): RAGHandlerConfig {
 /**
  * 从 rag-agent.config.json 读取 RAG 配置
  */
-function loadRAGConfigFromFile(): RAGHandlerConfig | null {
+export function loadRAGConfigFromFile(): RAGHandlerConfig | null {
   try {
     // 尝试多个可能的路径
     const possiblePaths = [
