@@ -31,24 +31,27 @@ export async function runRAGCLI(
 ): Promise<void> {
   const log = logger.child("rag-cli");
 
-  // 加载配置 - 使用 RAG 配置
-  const configPath = options.configPath || resolve(PROJECT_ROOT, "config/rag-agent.config.json");
+  // 加载主配置（包含模型配置）
+  const mainConfigPath = resolve(PROJECT_ROOT, "config/app-agent.config.json");
   const config = loadConfig({
-    configPath,
+    configPath: mainConfigPath,
     workspaceRoot: options.workspaceRoot || process.cwd(),
   });
+
+  // 读取 RAG 配置
+  const ragConfigPath = options.configPath || resolve(PROJECT_ROOT, "config/rag-agent.config.json");
 
   // 直接读取 rag-agent.config.json 获取 rag 配置
   let ragConfig: any = {};
   try {
-    const raw = readFileSync(configPath, "utf-8");
+    const raw = readFileSync(ragConfigPath, "utf-8");
     const parsed = JSON.parse(raw);
     ragConfig = parsed.rag || {};
   } catch (err) {
     log.warn("Failed to read RAG config", { error: String(err) });
   }
 
-  const mcpServers = config?.mcp?.servers || {};
+  const mcpServers = ragConfig.mcpServers || config?.mcp?.servers || {};
 
   const handlerConfig: RAGHandlerConfig = {
     enabled: ragConfig.enabled ?? true,

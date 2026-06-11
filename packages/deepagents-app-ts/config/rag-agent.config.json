@@ -1,12 +1,19 @@
 {
-  "model": {
-    "provider": "openai",
-    "name": "mimo-v2.5-pro",
-    "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1"
-  },
   "rag": {
     "enabled": true,
     "retrievalTools": ["context7", "howtocook-mcp"],
+    "mcpServers": {
+      "howtocook-mcp": {
+        "command": "npx",
+        "args": ["-y", "howtocook-mcp"],
+        "enabled": true
+      },
+      "context7": {
+        "command": "npx",
+        "args": ["-y", "@upstash/context7-mcp"],
+        "enabled": true
+      }
+    },
     "rewrite": {
       "maxKeywords": 5,
       "intentCategories": ["factual", "how_to", "comparison", "latest", "explain"]
@@ -25,20 +32,6 @@
       "streaming": true,
       "includeSources": true,
       "confidenceThreshold": 0.5
-    }
-  },
-  "mcp": {
-    "servers": {
-      "howtocook-mcp": {
-        "command": "npx",
-        "args": ["-y", "howtocook-mcp"],
-        "enabled": true
-      },
-      "context7": {
-        "command": "npx",
-        "args": ["-y", "@upstash/context7-mcp"],
-        "enabled": true
-      }
     }
   }
 }
