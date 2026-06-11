@@ -5,6 +5,8 @@
  * 流程：Query → Rewrite → Retrieve → Prepare → Agent → Response
  */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { executeRAG, type CreateRAGGraphConfig } from "./graph.js";
 import { DEFAULT_RAG_CONFIG } from "./nodes/types.js";
 import type { AppConfig } from "../runtime/config/config-loader.js";
@@ -29,6 +31,42 @@ export function createRAGHandlerConfig(config: AppConfig): RAGHandlerConfig {
     mcpServers,
     retrievalTools: ragConfig.retrievalTools || Object.keys(mcpServers),
   };
+}
+
+/**
+ * 从 rag-agent.config.json 读取 RAG 配置
+ */
+function loadRAGConfigFromFile(): RAGHandlerConfig | null {
+  try {
+    // 尝试多个可能的路径
+    const possiblePaths = [
+      resolve(process.cwd(), "config/rag-agent.config.json"),
+      resolve(process.cwd(), "../config/rag-agent.config.json"),
+      resolve(process.cwd(), "../../config/rag-agent.config.json"),
+    ];
+
+    for (const configPath of possiblePaths) {
+      try {
+        const raw = readFileSync(configPath, "utf-8");
+        const parsed = JSON.parse(raw);
+        const ragConfig = parsed.rag || {};
+
+        if (ragConfig.enabled) {
+          logger.info("Loaded RAG config from file", { path: configPath });
+          return {
+            enabled: ragConfig.enabled,
+            mcpServers: ragConfig.mcpServers || {},
+            retrievalTools: ragConfig.retrievalTools || Object.keys(ragConfig.mcpServers || {}),
+          };
+        }
+      } catch {
+        // Continue to next path
+      }
+    }
+  } catch (err) {
+    logger.debug("Failed to load RAG config from file", { error: String(err) });
+  }
+  return null;
 }
 
 /**
@@ -110,7 +148,8 @@ export class RAGHandler {
  * 创建 RAG 处理器实例
  */
 export function createRAGHandler(config: AppConfig, ragHandlerConfig?: RAGHandlerConfig): RAGHandler | null {
-  const handlerConfig = ragHandlerConfig || createRAGHandlerConfig(config);
+  // 优先使用传入的配置，否则从文件读取
+  const handlerConfig = ragHandlerConfig || loadRAGConfigFromFile() || createRAGHandlerConfig(config);
 
   logger.info("Creating RAG Handler", {
     enabled: handlerConfig.enabled,

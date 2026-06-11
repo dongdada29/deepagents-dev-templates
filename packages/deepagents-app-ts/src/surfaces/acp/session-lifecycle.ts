@@ -45,6 +45,7 @@ import {
 import { buildACPAgentConfigWithMcpAsync } from "./config-builder.js";
 import { SessionManager } from "./session-manager.js";
 import { handleAcpSlashCommand, type AcpConnection } from "./slash-command-handler.js";
+import { createRAGHandler, createRAGHandlerConfig, RAGHandler } from "../../app/rag-handler.js";
 
 /** Per-session context the hooks need across the prompt lifecycle. */
 interface SessionContext {
@@ -97,6 +98,17 @@ export function createAcpSessionHooks(opts: AcpSessionHooksOptions): {
       mcpManager: opts.initialMcpManager,
       mode: "agent",
     };
+
+  // Create RAG handler if configured
+  let ragHandler: RAGHandler | null = null;
+  try {
+    ragHandler = createRAGHandler(opts.initialConfig);
+    if (ragHandler) {
+      log.info("RAG Handler created for ACP sessions");
+    }
+  } catch (err) {
+    log.debug("RAG Handler not created", { error: String(err) });
+  }
 
   const hooks: DeepAgentsServerHooks = {
     async configureSession(ctx) {
@@ -191,6 +203,20 @@ export function createAcpSessionHooks(opts: AcpSessionHooksOptions): {
         completeHarnessTurn(storage);
         return slashResult;
       }
+
+      // RAG fixed flow: if RAG handler is configured, process through RAG pipeline
+      if (ragHandler && ctx.promptText) {
+        log.info("Processing through RAG pipeline", { query: ctx.promptText.substring(0, 100) });
+        const ragResult = await ragHandler.handle(ctx.promptText);
+        if (ragResult) {
+          log.info("RAG pipeline completed");
+          manager.touch(ctx.sessionId);
+          completeHarnessTurn(storage);
+          return { content: ragResult };
+        }
+        log.info("RAG pipeline returned null, falling back to agent");
+      }
+
       return undefined;
     },
 
