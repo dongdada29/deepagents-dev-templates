@@ -34,17 +34,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "deepagents-acp-py",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
-    "pydantic-settings>=2.3",
-    "pydantic-ai>=1.97.0",
-    "pydantic-ai-slim[anthropic,openai,web-fetch]>=1.97.0",
-    "pydantic-ai-backend[console]>=0.2.9",
-    "pydantic-ai-todo>=0.2.3",
-    "pydantic-ai-shields>=0.3.3",
-    "summarization-pydantic-ai>=0.1.5",
-    "subagents-pydantic-ai>=0.2.5",
     "pyyaml>=6.0",
     "httpx>=0.27",
     "python-dotenv>=1.0",
@@ -53,6 +44,14 @@ dependencies = [
     "prompt-toolkit>=3.0",
     "click>=8.1",
     "anyio>=4.0",
+    # ── Agent stack: LangGraph + deepagents (replaces pydantic-ai) ──
+    "deepagents>=0.6.8",
+    "deepagents-acp>=0.0.8",
+    "langgraph>=1.2.4",
+    "langchain>=1.3.7",
+    "langchain-anthropic>=1.4.5",
+    "langchain-openai>=1.3.0",
+    "langchain-google-genai>=4.2.5",
 ]
 
 [project.optional-dependencies]
@@ -65,9 +64,8 @@ cli = [
     "python-dotenv>=1.0.0",
 ]
 acp = ["agent-client-protocol>=0.8.0"]
-sandbox = ["pydantic-ai-backend[docker]>=0.2.9"]
 all = [
-    "deepagents-app-py[yaml,cli,acp,sandbox]",
+    "deepagents-app-py[yaml,cli,acp]",
 ]
 
 [project.urls]
@@ -83,9 +81,6 @@ deepagents-app-py = "deepagents_app_py.main:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[tool.uv.sources]
-deepagents-acp-py = { path = "../deepagents-acp-py", editable = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/deepagents_app_py"]
