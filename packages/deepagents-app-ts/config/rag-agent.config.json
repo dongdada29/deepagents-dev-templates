@@ -1,0 +1,25 @@
+{
+  "rag": {
+    "enabled": true,
+    "retrievalTools": ["chromadb-search", "brave-search"],
+    "rewrite": {
+      "maxKeywords": 5,
+      "intentCategories": ["factual", "how_to", "comparison", "latest", "explain"]
+    },
+    "retrieve": {
+      "maxResults": 10,
+      "timeout_ms": 5000,
+      "retryCount": 1
+    },
+    "prepare": {
+      "maxContextTokens": 4000,
+      "deduplication": true,
+      "sortByRelevance": true
+    },
+    "agent": {
+      "streaming": true,
+      "includeSources": true,
+      "confidenceThreshold": 0.5
+    }
+  }
+}
