@@ -21,19 +21,30 @@ log = logger.child("acp-config")
 def build_acp_agent_factory(
     config: Any,
     workspace_root: str,
+    server_instance: Any = None,
     session_config: Any | None = None,
+    mcp_tools: list[Any] | None = None,
 ) -> Any:
-    """Return a factory ``(AgentSessionContext) -> CompiledStateGraph``.
+    """Return a sync factory ``(AgentSessionContext) -> CompiledStateGraph``.
 
     The factory honors the per-session model override (``ctx.model`` is a
     ``"provider:model-name"`` string), so switching models in the ACP client
     actually rebuilds the agent with the new model.
+
+    *mcp_tools* are pre-loaded MCP tools (loaded once at bootstrap via
+    ``load_mcp_tools_from_config``) so the sync factory can include them
+    without needing async.
+
+    *server_instance* is the ``DeepAgentsAppServer`` — the factory reads
+    ``server_instance._session_mcp_servers`` for per-session MCP overrides.
     """
     from deepagents import create_deep_agent
 
-    from deepagents_app_py.runtime.agent_config import build_agent_config_parts
+    from deepagents_app_py.app.tools import collect_tools
 
     base_model_str = f"{config.model.provider}:{config.model.name}"
+    builtin_tools = collect_tools()
+    preloaded_mcp = mcp_tools or []
 
     def build_agent(ctx: Any) -> Any:
         cwd = getattr(ctx, "cwd", None) or workspace_root
@@ -51,9 +62,12 @@ def build_acp_agent_factory(
                 log.warn("Could not apply session model override", model=model_override)
                 cfg = config
 
-        from deepagents_app_py.app.tools import collect_tools
+        all_tools = builtin_tools + preloaded_mcp
 
-        parts = build_agent_config_parts(cfg, session_config, cwd, collect_tools())
+        # Build config parts synchronously (MCP tools already pre-loaded).
+        from deepagents_app_py.runtime.agent_config import build_agent_config_parts_sync
+
+        parts = build_agent_config_parts_sync(cfg, session_config, cwd, all_tools)
         return create_deep_agent(**parts)
 
     return build_agent

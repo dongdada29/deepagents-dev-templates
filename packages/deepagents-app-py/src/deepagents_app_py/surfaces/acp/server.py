@@ -19,14 +19,14 @@ import os
 from deepagents_app_py.runtime.logger import logger
 
 
-def bootstrap(
+async def _bootstrap_async(
     *,
     acp: bool = True,
     debug: bool = False,
     config_path: str | None = None,
     workspace_root: str | None = None,
 ) -> None:
-    """Bootstrap and start the ACP server over stdin/stdout."""
+    """Async bootstrap — loads MCP tools, builds factory, starts server."""
     log = logger.child("acp-server")
     if debug:
         os.environ.setdefault("LOG_LEVEL", "debug")
@@ -43,13 +43,13 @@ def bootstrap(
     if session_config:
         log.info("Loaded ACP session config from environment")
 
-    # Agent factory — rebuilds a deepagents graph per session / model switch.
-    factory = build_acp_agent_factory(config, ws, session_config=session_config)
+    # Pre-load MCP tools once at bootstrap (async).
+    from deepagents_app_py.app.tools.mcp_bridge import collect_mcp_servers, load_mcp_tools
 
-    # Single-entry model list (the model selector advertised to the ACP client).
-    provider = config.model.provider or "anthropic"
-    model_name = config.model.name or "claude-sonnet-4-6"
-    models = [{"value": f"{provider}:{model_name}", "name": model_name}]
+    mcp_servers = collect_mcp_servers(config)
+    mcp_tools = await load_mcp_tools(mcp_servers)
+    if mcp_tools:
+        log.info("Pre-loaded MCP tools", count=len(mcp_tools), servers=list(mcp_servers.keys()))
 
     if not acp:
         log.info("ACP mode disabled — skipping server start")
@@ -66,9 +66,14 @@ def bootstrap(
     except Exception:  # noqa: BLE001 — version metadata is best-effort
         pkg_version = "0.0.0"
 
+    # Agent factory — sync, uses pre-loaded MCP tools.
+    factory = build_acp_agent_factory(
+        config, ws, session_config=session_config, mcp_tools=mcp_tools
+    )
+
     server = DeepAgentsAppServer(
         agent=factory,
-        models=models,
+        models=[{"value": f"{config.model.provider}:{config.model.name}", "name": config.model.name}],
         server_name=config.agent.name or "deepagents-app-py",
         server_version=getattr(config.agent, "version", None) or pkg_version,
     )
@@ -76,7 +81,26 @@ def bootstrap(
     log.info(
         "Starting ACP server",
         name=config.agent.name,
-        model=model_name,
+        model=config.model.name,
         workspaceRoot=ws,
+        mcpTools=len(mcp_tools),
     )
-    asyncio.run(run_acp_agent(server))
+    await run_acp_agent(server)
+
+
+def bootstrap(
+    *,
+    acp: bool = True,
+    debug: bool = False,
+    config_path: str | None = None,
+    workspace_root: str | None = None,
+) -> None:
+    """Bootstrap and start the ACP server over stdin/stdout (sync entry point)."""
+    asyncio.run(
+        _bootstrap_async(
+            acp=acp,
+            debug=debug,
+            config_path=config_path,
+            workspace_root=workspace_root,
+        )
+    )

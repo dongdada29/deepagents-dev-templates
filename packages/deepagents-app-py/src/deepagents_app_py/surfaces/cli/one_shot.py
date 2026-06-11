@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -31,7 +32,7 @@ def run_one_shot(prompt: str, options: Any = None) -> int:
     log.info("Running one-shot prompt", prompt=prompt[:100])
 
     from deepagents_app_py.app.tools import collect_tools
-    from deepagents_app_py.runtime.agent_config import build_graph
+    from deepagents_app_py.runtime.agent_config import build_graph_with_mcp
     from deepagents_app_py.runtime.config.config_loader import loadConfig
 
     ws = getattr(options, "workspace_root", None) or os.getcwd()
@@ -40,7 +41,9 @@ def run_one_shot(prompt: str, options: Any = None) -> int:
     )
 
     # One-shot: no checkpointer (no thread to persist).
-    graph = build_graph(config, None, ws, collect_tools(), checkpointer=False)
+    graph = asyncio.run(
+        build_graph_with_mcp(config, None, ws, collect_tools(), checkpointer=False)
+    )
 
     try:
         result = graph.invoke({"messages": [{"role": "user", "content": prompt}]})
