@@ -108,6 +108,11 @@ export async function bootstrap(options: ACPServerOptions = {}): Promise<void> {
     initialConfig: config,
     initialWorkspaceRoot: workspaceRoot,
     initialMcpManager: mcpManager,
+    // The bootstrap agent config — used as the tool-source fallback for slash
+    // commands in sessions that don't switch workspace via cwd (where no
+    // per-session agentConfig is built). Without this, /status, /help, etc.
+    // would report an empty tool list.
+    initialAgentConfig: agentConfig,
     configPath: options.configPath,
     sessionConfig,
     useSessionCwd: !options.workspaceRoot && !config.workspace.workingDir,

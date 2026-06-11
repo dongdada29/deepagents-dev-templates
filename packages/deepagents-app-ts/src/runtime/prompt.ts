@@ -10,6 +10,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { type AppConfig, type ACPSessionConfig } from "./config/config-loader.js";
+import { PLATFORM_CONVENTIONS } from "../app/harness-profile.js";
 
 /**
  * Resolve system prompt with priority chain:
@@ -20,9 +21,13 @@ export function resolveSystemPrompt(
   sessionConfig: ACPSessionConfig | undefined,
   workspaceRoot: string
 ): string {
-  // ACP session prompt takes highest priority
+  // ACP session prompt takes highest priority. This prompt is supplied
+  // externally (the scenario / target-agent prompt) and does not carry this
+  // template's platform conventions, so append them here. This is the one path
+  // that bypasses the bundled prompt files; for every other source the
+  // conventions already live in the prompt file (or are irrelevant).
   if (sessionConfig?.systemPrompt) {
-    return sessionConfig.systemPrompt;
+    return `${sessionConfig.systemPrompt.trimEnd()}\n\n${PLATFORM_CONVENTIONS}`;
   }
 
   if (config.agent.systemPrompt) {

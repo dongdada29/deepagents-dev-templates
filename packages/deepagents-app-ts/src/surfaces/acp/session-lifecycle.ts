@@ -44,7 +44,7 @@ import {
 } from "../../runtime/storage/runtime-storage.js";
 import { buildACPAgentConfigWithMcpAsync } from "./config-builder.js";
 import { SessionManager } from "./session-manager.js";
-import { handleAcpSlashCommand, type AcpConnection } from "./slash-command-handler.js";
+import { handleAcpSlashCommand, sendAcpText, type AcpConnection } from "./slash-command-handler.js";
 import { createRAGHandler, loadRAGConfigFromFile, RAGHandler } from "../../app/rag-handler.js";
 
 /** Per-session context the hooks need across the prompt lifecycle. */
@@ -68,6 +68,12 @@ export interface AcpSessionHooksOptions {
   initialConfig: AppConfig;
   initialWorkspaceRoot: string;
   initialMcpManager: MCPManager;
+  /**
+   * The bootstrap agent config. Used as the fallback source of tool info for
+   * slash commands in sessions that don't rebuild an agentConfig via a cwd
+   * switch (the common path), so /status etc. still see a populated tool list.
+   */
+  initialAgentConfig?: DeepAgentConfig;
   configPath?: string;
   sessionConfig?: ACPSessionConfig;
   /** When true, a session's `cwd` param switches the active workspace root. */
@@ -91,13 +97,18 @@ export function createAcpSessionHooks(opts: AcpSessionHooksOptions): {
     log.info("ACP MCP forwarding disabled via ACP_MCP_FORWARDING=disabled");
   }
 
+  // The default SessionContext for sessions that don't switch workspace via
+  // cwd. Built once as a factory so the ctxFor fallback and the configureSession
+  // initializer can't drift apart.
+  const initialCtx = (mode: string = "agent"): SessionContext => ({
+    config: opts.initialConfig,
+    workspaceRoot: opts.initialWorkspaceRoot,
+    mcpManager: opts.initialMcpManager,
+    mode,
+  });
+
   const ctxFor = (sessionId: string): SessionContext =>
-    sessionCtx.get(sessionId) ?? {
-      config: opts.initialConfig,
-      workspaceRoot: opts.initialWorkspaceRoot,
-      mcpManager: opts.initialMcpManager,
-      mode: "agent",
-    };
+    sessionCtx.get(sessionId) ?? initialCtx();
 
   // Create RAG handler if configured
   let ragHandler: RAGHandler | null = null;
@@ -119,12 +130,7 @@ export function createAcpSessionHooks(opts: AcpSessionHooksOptions): {
 
   const hooks: DeepAgentsServerHooks = {
     async configureSession(ctx) {
-      let active: SessionContext = {
-        config: opts.initialConfig,
-        workspaceRoot: opts.initialWorkspaceRoot,
-        mcpManager: opts.initialMcpManager,
-        mode: ctx.mode ?? "agent",
-      };
+      let active: SessionContext = initialCtx(ctx.mode ?? "agent");
       let patch: SessionConfigurePatch | undefined;
 
       // Per-session cwd → rebuild config + agent config rooted at the requested
@@ -192,7 +198,6 @@ export function createAcpSessionHooks(opts: AcpSessionHooksOptions): {
         workspaceRoot: sc.workspaceRoot,
         sessionId: ctx.sessionId,
       });
-      beginHarnessTurn(ctx.promptText ?? undefined, storage);
       if (ctx.promptText) {
         appendRuntimeMessage({ role: "user", content: ctx.promptText }, storage);
       }
@@ -207,26 +212,44 @@ export function createAcpSessionHooks(opts: AcpSessionHooksOptions): {
             workspaceRoot: sc.workspaceRoot,
             mode: sc.mode,
             sessionId: ctx.sessionId,
-            tools: sc.agentConfig?.tools,
+            // Fall back to the bootstrap agent's tools when this session has
+            // no per-session agentConfig (the common no-cwd-switch path).
+            tools: sc.agentConfig?.tools ?? opts.initialAgentConfig?.tools,
           })
       );
 
       if (slashResult) {
-        manager.touch(ctx.sessionId);
+        // A handled slash command short-circuits the agent, so the
+        // harness-lifecycle middleware (beforeAgent/afterAgent) never runs for
+        // it. Record a single begin+complete turn here so the lifecycle still
+        // reflects the interaction. A slash handler that throws falls through to
+        // onPromptError, which records the failure.
+        beginHarnessTurn(ctx.promptText ?? undefined, storage);
         completeHarnessTurn(storage);
+        manager.touch(ctx.sessionId);
         return slashResult;
       }
 
-      // RAG fixed flow: if RAG handler is configured, process through RAG pipeline
+      // RAG fixed flow: when configured, answer through the RAG pipeline and
+      // short-circuit the agent. Like the slash path above, the short-circuit
+      // skips the harness-lifecycle middleware, so the turn is begun/completed
+      // here. The answer must be streamed over the connection — an onPrompt
+      // result carries only a stop reason.
       if (ragHandler && ctx.promptText) {
         log.info("Processing through RAG pipeline", { query: ctx.promptText.substring(0, 100) });
         try {
           const ragResult = await ragHandler.handle(ctx.promptText);
           if (ragResult) {
             log.info("RAG pipeline completed", { resultLength: ragResult.length });
-            manager.touch(ctx.sessionId);
+            beginHarnessTurn(ctx.promptText, storage);
+            const conn = ctx.conn as AcpConnection | undefined;
+            if (conn) {
+              await sendAcpText(ctx.sessionId, conn, ragResult);
+            }
+            appendRuntimeMessage({ role: "assistant", content: ragResult }, storage);
             completeHarnessTurn(storage);
-            return { content: ragResult };
+            manager.touch(ctx.sessionId);
+            return { stopReason: "end_turn" };
           }
           log.info("RAG pipeline returned null, falling back to agent");
         } catch (err) {
@@ -239,6 +262,11 @@ export function createAcpSessionHooks(opts: AcpSessionHooksOptions): {
         });
       }
 
+      // Normal prompt (or unrecognized "/..."): the agent runs and its
+      // harness-lifecycle middleware owns the turn lifecycle (begin/complete/
+      // fail). Beginning a turn here would double-count counters.turns because
+      // the middleware's beforeAgent begins it too. onPromptError remains the
+      // backstop for failures the middleware can't see (e.g. tool errors).
       return undefined;
     },
 

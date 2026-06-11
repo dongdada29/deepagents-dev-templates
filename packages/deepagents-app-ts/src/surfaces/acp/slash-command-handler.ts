@@ -100,7 +100,8 @@ function toSlashToolInfo(tools: unknown): SlashToolInfo[] {
   return result;
 }
 
-async function sendAcpText(
+/** Stream a text chunk to the ACP client as an agent message. */
+export async function sendAcpText(
   sessionId: string,
   conn: AcpConnection,
   text: string

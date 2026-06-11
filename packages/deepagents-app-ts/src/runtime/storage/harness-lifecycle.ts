@@ -98,6 +98,13 @@ export function failHarnessTurn(
 ): HarnessLifecycleSnapshot {
   const current = readHarnessLifecycle(storage);
   const now = new Date().toISOString();
+  // Idempotent within a turn: one failure can be reported by more than one
+  // layer — the harness-lifecycle middleware's wrapModelCall catch AND the ACP
+  // onPromptError hook both call this for the same model error. Every turn
+  // starts with beginHarnessTurn (phase → "running"), so an already-"failed"
+  // phase means we are re-reporting the same turn; don't double-count
+  // failedTurns.
+  const alreadyFailed = current.phase === "failed";
   return writeLifecycle(storage, {
     ...current,
     phase: "failed",
@@ -108,7 +115,9 @@ export function failHarnessTurn(
       : undefined,
     counters: {
       ...current.counters,
-      failedTurns: current.counters.failedTurns + 1,
+      failedTurns: alreadyFailed
+        ? current.counters.failedTurns
+        : current.counters.failedTurns + 1,
     },
     pendingWrites: [],
     lastError: error instanceof Error ? error.message : String(error),
