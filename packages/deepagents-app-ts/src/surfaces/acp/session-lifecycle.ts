@@ -214,14 +214,23 @@ export function createAcpSessionHooks(opts: AcpSessionHooksOptions): {
       // RAG fixed flow: if RAG handler is configured, process through RAG pipeline
       if (ragHandler && ctx.promptText) {
         log.info("Processing through RAG pipeline", { query: ctx.promptText.substring(0, 100) });
-        const ragResult = await ragHandler.handle(ctx.promptText);
-        if (ragResult) {
-          log.info("RAG pipeline completed");
-          manager.touch(ctx.sessionId);
-          completeHarnessTurn(storage);
-          return { content: ragResult };
+        try {
+          const ragResult = await ragHandler.handle(ctx.promptText);
+          if (ragResult) {
+            log.info("RAG pipeline completed", { resultLength: ragResult.length });
+            manager.touch(ctx.sessionId);
+            completeHarnessTurn(storage);
+            return { content: ragResult };
+          }
+          log.info("RAG pipeline returned null, falling back to agent");
+        } catch (err) {
+          log.error("RAG pipeline failed", { error: String(err) });
         }
-        log.info("RAG pipeline returned null, falling back to agent");
+      } else {
+        log.debug("RAG handler not available or no prompt text", {
+          hasHandler: !!ragHandler,
+          hasPrompt: !!ctx.promptText,
+        });
       }
 
       return undefined;
