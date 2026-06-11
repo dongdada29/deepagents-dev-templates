@@ -18,10 +18,10 @@ import { createPeriodicReminderMiddleware } from "./middleware/periodic-reminder
 import { createCostTrackingMiddleware } from "./middleware/cost-tracking.js";
 import { createFsPathResolver } from "./middleware/fs-path-resolver.js";
 import { createHookMiddleware, getHooks, registerConfiguredHooks } from "../app/hooks/index.js";
-import { registerAppHarnessProfile } from "../app/harness-profile.js";
 import { createHarnessLifecycleMiddleware } from "./middleware/harness-lifecycle.js";
 import { resolveModel } from "./model.js";
 import { resolveSystemPrompt, withRuntimeContextPrompt } from "./prompt.js";
+import { PLATFORM_CONVENTIONS } from "../app/harness-profile.js";
 import { discoverMemoryFiles, discoverSubAgents, resolveSkillsPaths } from "./discovery.js";
 import { resolveSandboxPolicy, buildPermissions, buildInterruptOn } from "./permissions.js";
 
@@ -55,9 +55,10 @@ export function buildAgentConfigParts(
   const mwConfig = config.middleware;
   registerConfiguredHooks(config.hooks, workspaceRoot);
 
-  // Register the app harness profile so platform conventions are injected into
-  // every agent (main + subagents) via deepagents' harness-profile mechanism.
-  registerAppHarnessProfile(config);
+  // Platform conventions are injected in `resolveSystemPrompt` (appended to the
+  // ACP session prompt) rather than via a deepagents harness-profile
+  // `systemPromptSuffix`, which is override-wins and gets silently dropped by
+  // built-in model profiles for the default model. See app/harness-profile.ts.
 
   middleware.push(createHarnessLifecycleMiddleware());
 
@@ -164,7 +165,20 @@ Before making any changes, you MUST:
     // When backend is provided, memory is handled by explicit middleware above.
     // Otherwise, fall back to the shortcut parameter (no addCacheControl).
     memory: backend ? undefined : (memoryPaths.length > 0 ? memoryPaths : undefined),
-    subagents: discoveredSubAgents.length > 0 ? discoveredSubAgents : undefined,
+    // Discovered subagents inherit the main agent's full toolset (deepagents
+    // coalesces `tools ?? defaultTools`), so the platform conventions (tool
+    // priority + secret handling) apply to them too. The main agent gets these
+    // via resolveSystemPrompt / its prompt file; inject them here so each
+    // declarative subagent's AGENT.md prompt is covered as well. (The
+    // auto-added general-purpose subagent is created by deepagents and is not
+    // reachable from here — it keeps the built-in DEFAULT_SUBAGENT_PROMPT.)
+    subagents:
+      discoveredSubAgents.length > 0
+        ? discoveredSubAgents.map((sa) => ({
+            ...sa,
+            systemPrompt: `${sa.systemPrompt.trimEnd()}\n\n${PLATFORM_CONVENTIONS}`,
+          }))
+        : undefined,
     permissions,
     interruptOn,
     // REPL/one-shot pass `false` here. ACP (DeepAgentsServer) passes a

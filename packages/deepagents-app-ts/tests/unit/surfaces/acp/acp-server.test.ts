@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../../../../src/runtime/config/config-loader.js";
@@ -57,6 +57,44 @@ describe("ACP server config", () => {
     }
   });
 
+  it("injects platform conventions into discovered subagents", () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "subagent-conv-test-"));
+    try {
+      // A declarative subagent under the default ./.agents/agents/ directory.
+      const agentDir = join(workspaceRoot, ".agents", "agents", "researcher");
+      mkdirSync(agentDir, { recursive: true });
+      writeFileSync(
+        join(agentDir, "AGENT.md"),
+        [
+          "---",
+          "name: researcher",
+          "description: Deep research helper",
+          "---",
+          "You are a focused research assistant.",
+        ].join("\n"),
+        "utf-8"
+      );
+
+      const config = loadConfig({ configPath: "/nonexistent.json", workspaceRoot });
+      const agentConfig = buildACPAgentConfig(config, workspaceRoot, undefined);
+
+      const researcher = agentConfig.subagents?.find(
+        (sub) => (sub as { name?: string }).name === "researcher"
+      ) as { systemPrompt?: string } | undefined;
+
+      expect(researcher).toBeDefined();
+      // The AGENT.md body is preserved …
+      expect(researcher?.systemPrompt ?? "").toContain("focused research assistant");
+      // … and the platform conventions are appended, since discovered subagents
+      // inherit the main agent's toolset. This is the coverage the removed
+      // harness profile used to (try to) provide for every agent.
+      expect(researcher?.systemPrompt ?? "").toContain("Tool Selection Priority (MANDATORY)");
+      expect(researcher?.systemPrompt ?? "").toContain("agent_variable");
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it("loads startup session config from ACP_SESSION_CONFIG_JSON", () => {
     process.env.ACP_SESSION_CONFIG_JSON = JSON.stringify({
       model: "claude-from-env-session",
@@ -81,7 +119,13 @@ describe("ACP server config", () => {
       config.agent.systemPrompt = "Configured prompt";
 
       expect(resolveSystemPrompt(config, undefined, workspaceRoot)).toContain("Configured prompt");
-      expect(resolveSystemPrompt(config, { systemPrompt: "ACP prompt" }, workspaceRoot)).toBe("ACP prompt");
+      // The ACP session prompt wins the priority chain AND has the platform
+      // conventions appended (it is supplied externally and does not carry
+      // them). See runtime/prompt.ts + app/harness-profile.ts.
+      const acpResolved = resolveSystemPrompt(config, { systemPrompt: "ACP prompt" }, workspaceRoot);
+      expect(acpResolved.startsWith("ACP prompt")).toBe(true);
+      expect(acpResolved).toContain("Tool Selection Priority (MANDATORY)");
+      expect(acpResolved).toContain("agent_variable");
     } finally {
       rmSync(workspaceRoot, { recursive: true, force: true });
     }
