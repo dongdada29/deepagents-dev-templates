@@ -9,13 +9,11 @@
   "agent_servers": {
     "rag-agent": {
       "type": "custom",
-      "command": "node",
+      "command": "/Users/apple/.nvm/versions/node/v24.14.0/bin/tsx",
       "args": [
-        "--import",
-        "tsx",
-        "/Users/apple/workspace/deepagents-dev-templates-rag/packages/deepagents-app-ts/src/index.ts",
-        "--config",
-        "/Users/apple/workspace/deepagents-dev-templates-rag/packages/deepagents-app-ts/config/rag-agent.config.json"
+        "--tsconfig",
+        "/Users/apple/workspace/deepagents-dev-templates-rag/packages/deepagents-app-ts/tsconfig.json",
+        "/Users/apple/workspace/deepagents-dev-templates-rag/packages/deepagents-app-ts/src/index.ts"
       ],
       "env": {
         "ANTHROPIC_API_KEY": "<your-anthropic-api-key>",
