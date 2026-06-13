@@ -1,48 +1,30 @@
 /**
- * 默认 flow 的状态(图的 channels)。通用骨架,演示常见的 state 形态:
- *  - input / history:输入
- *  - attempts / decision:编排控制(条件边用)
- *  - plan:当前轮 plan 节点选定的下一步(每轮覆写)
- *  - pendingResult:act 产出、observe 消费的瞬态(每轮清)
- *  - observations[]:跨轮累积的工具结果(observe 节点 append)
- *  - steps[]:人类可读轨迹(便于测试 / 展示)
- *  - output:最终回答
+ * 默认 flow 的状态（LangGraph ReAct）。
  *
- * ⚠️ LangGraph 限制:channel 名不能和节点名相同 → 判定字段叫 `decision`,判定节点叫 `reflect`。
- * 想加自己的字段?在下面加即可;图里用 `Annotation` 声明同名 channel(见 graph.ts)。
+ * messages: 标准消息流（Human/AI/Tool，经 messagesStateReducer 累积）——自动进 checkpointer，
+ *           上下文压缩 / 持久化 / ToolMessage 都操作这条标准通道。
+ * input:    本次用户输入（prepare 转 HumanMessage 加入 messages）。
+ * output:   最终回答（respond 节点写入，供非流式 surface）。
+ * steps:    人类可读轨迹（便于测试 / 展示）。
  */
 
+import { Annotation } from "@langchain/langgraph";
+import { messagesStateReducer } from "@langchain/langgraph";
 import { BaseMessage } from "@langchain/core/messages";
 
-/** 一次工具调用结果(think → act 产出、observe 累积)。 */
-export interface Observation {
-  tool: string;
-  args: Record<string, unknown>;
-  result: string;
-}
+const lastValue = <T>(_: T, n: T): T => n;
 
-/** plan 节点选定的下一步 action。 */
-export interface PlanStep {
-  tool: string;
-  args: Record<string, unknown>;
-  reason?: string;
-}
+export const FlowStateAnnotation = Annotation.Root({
+  messages: Annotation<BaseMessage[]>({
+    reducer: messagesStateReducer,
+    default: () => [],
+  }),
+  input: Annotation<string>({ value: lastValue<string>, default: () => "" }),
+  output: Annotation<string>({ value: lastValue<string>, default: () => "" }),
+  steps: Annotation<string[]>({
+    reducer: (prev, next) => [...prev, ...next],
+    default: () => [],
+  }),
+});
 
-export interface FlowState {
-  /** 输入 */
-  input: string;
-  history?: BaseMessage[];
-
-  /** 编排控制(条件边) */
-  attempts?: number; // 已完成的迭代轮次
-  decision?: string; // reflect 判定："continue" | "done"
-
-  /** plan / act / observe */
-  plan?: PlanStep | null; // 当前轮的下一步
-  pendingResult?: Observation | null; // act 产出、observe 消费(瞬态)
-  observations?: Observation[]; // 跨轮累积
-
-  /** 轨迹 / 输出 */
-  steps?: string[];
-  output?: string;
-}
+export type FlowState = typeof FlowStateAnnotation.State;

@@ -12,26 +12,17 @@ describe("getFlowTopology", () => {
     const { nodes } = await getFlowTopology();
     const ids = nodes.map((n) => n.id);
     expect(ids).toEqual(
-      expect.arrayContaining([
-        "__start__",
-        "prepare",
-        "think",
-        "act",
-        "observe",
-        "reflect",
-        "respond",
-        "__end__",
-      ])
+      expect.arrayContaining(["__start__", "prepare", "think", "tools", "respond", "__end__"])
     );
     expect(nodes.every((n) => n.label.length > 0)).toBe(true);
   });
 
-  it("条件边只在 reflect 出口(think / respond),且被标记 conditional", async () => {
+  it("条件边只在 think 出口(tools / respond),且被标记 conditional", async () => {
     const { edges } = await getFlowTopology();
     const conditional = edges.filter((e) => e.conditional);
     expect(conditional).toHaveLength(2);
-    expect(conditional.every((e) => e.source === "reflect")).toBe(true);
-    expect(conditional.map((e) => e.target).sort()).toEqual(["respond", "think"]);
+    expect(conditional.every((e) => e.source === "think")).toBe(true);
+    expect(conditional.map((e) => e.target).sort()).toEqual(["respond", "tools"]);
   });
 
   it("主干顺序边存在且非条件", async () => {
@@ -40,15 +31,14 @@ describe("getFlowTopology", () => {
       edges.some((e) => e.source === source && e.target === target && !e.conditional);
     expect(has("__start__", "prepare")).toBe(true);
     expect(has("prepare", "think")).toBe(true);
-    expect(has("think", "act")).toBe(true);
-    expect(has("act", "observe")).toBe(true);
-    expect(has("observe", "reflect")).toBe(true);
+    expect(has("tools", "think")).toBe(true);
     expect(has("respond", "__end__")).toBe(true);
   });
 
   it("产出可渲染的 Mermaid 源", async () => {
     const { mermaid } = await getFlowTopology();
     expect(mermaid).toContain("graph TD");
-    expect(mermaid).toContain("reflect");
+    expect(mermaid).toContain("think");
+    expect(mermaid).toContain("tools");
   });
 });

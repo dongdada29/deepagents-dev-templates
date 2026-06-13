@@ -7,13 +7,16 @@
  *   (默认) / acp      启动 ACP 服务（stdio）—— 供 nuwaclaw/Zed/JetBrains
  *   flow "<输入>"     命令行跑一次默认 flow（测试用）
  *   flow -i           交互模式
+ *   graph             导出默认图拓扑（JSON；加 --mermaid 出 Mermaid 源）
  *
- * 默认图是 ReAct 式骨架（prepare → think → act → observe → reflect → respond）。完整范例见 examples/rag。
+ * 默认图是标准 LangGraph ReAct（prepare → think ↔ tools → respond）。
+ * 工具/会话/压缩/Skills/Subagent 经 FlowRuntime（框架原生能力 + 能力分层配置）驱动。
  * 选项：--config <path>  --debug  -h/--help
  */
 
 import { config as loadDotenv } from "dotenv";
 import { loadFlowConfig } from "./runtime/config.js";
+import { createFlowRuntime } from "./runtime/flow-runtime.js";
 import { createDefaultExecutor } from "./app/default-flow.js";
 import { bootstrapFlowAcp } from "./surfaces/acp/server.js";
 import { runFlowCli } from "./surfaces/cli/run.js";
@@ -76,7 +79,8 @@ const HELP = `deepagents-flow-ts — 通用工作流编排模板
   deepagents-flow-ts flow -i        交互模式
   deepagents-flow-ts graph          导出默认图拓扑（JSON；加 --mermaid 出 Mermaid 源）
 
-默认图是 ReAct 式骨架（prepare → think → act → observe → reflect → respond）；完整范例见 examples/rag。
+默认图是标准 LangGraph ReAct（prepare → think ↔ tools → respond）。
+工具/会话/压缩经 FlowRuntime（框架原生 + 能力分层）驱动。
 
 选项:
   --config <path>   指定配置文件（默认 config/flow-agent.config.json）
@@ -104,7 +108,8 @@ async function main(): Promise<void> {
   loadDotenv();
 
   const { appConfig } = loadFlowConfig({ configPath: args.configPath });
-  const executor = createDefaultExecutor(appConfig);
+  const runtime = await createFlowRuntime(appConfig);
+  const executor = createDefaultExecutor(runtime);
 
   if (args.command === "flow") {
     await runFlowCli(executor, {
@@ -112,7 +117,7 @@ async function main(): Promise<void> {
       interactive: args.interactive,
     });
   } else {
-    await bootstrapFlowAcp({ executor, appConfig, debug: args.debug });
+    await bootstrapFlowAcp({ executor, appConfig: runtime.config, debug: args.debug });
   }
 }
 

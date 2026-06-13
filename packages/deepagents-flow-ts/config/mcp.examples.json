@@ -1,0 +1,25 @@
+{
+  "_comment": "扩展能力 MCP 示例（不会被自动加载）。复制需要的 server 到 mcp.default.json 的 servers，或经 ACP/nuwax 平台面板下发。这些属于 acp-dynamic 扩展能力层。",
+  "servers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"],
+      "description": "联网浏览/抓取/页面自动化（chrome-devtools）—— 扩展能力"
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${WORKSPACE_ROOT}"],
+      "description": "受限文件系统读写（如需与 deepagents 内置 filesystem 不同的边界）—— 扩展能力"
+    },
+    "bash": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-shell"],
+      "description": "shell 执行（如偏好经 MCP 而非内置 bash 工具）—— 扩展能力"
+    },
+    "duckduckgo": {
+      "command": "npx",
+      "args": ["-y", "duckduckgo-mcp-server"],
+      "description": "免 key 网络搜索（examples/travel-planner 已用）—— 扩展能力"
+    }
+  }
+}

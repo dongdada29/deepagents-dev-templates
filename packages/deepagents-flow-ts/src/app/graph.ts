@@ -1,105 +1,196 @@
 /**
- * 默认 Flow Graph —— 通用工作流模板的「框架完整」骨架(非业务、非 RAG)。
+ * 默认 Flow Graph —— 标准 LangGraph ReAct（显式节点，非 createReactAgent 黑盒）。
  *
- *   START → prepare → think → act → observe → reflect ─(条件边)─┐
- *                          ▲                                  ├─ continue & 未达上限 → think(下一轮)
- *                          └──────────────────────────────────┘
- *                                                     └─ 否则 → respond → END
+ *   START → prepare → think(model.bindTools) ──(toolsCondition)──┐
+ *                      ▲                                        ├─ 有 tool_calls → tools(ToolNode + onToolCall 透出) → think
+ *                      └────────────────────────────────────────┘
+ *                                               └─ 无 tool_calls → respond(流式) → END
  *
- * 每个节点演示一个常用编排模式(见各节点文件顶部注释):
- *   prepare 纯逻辑/初始化 · think LLM 节点 · act 工具调用+onToolCall ·
- *   observe state 累积 · reflect 条件边+循环 · respond 流式输出
- * 少用模式(Send 并行 / interrupt / Command / 子图 / checkpointer)见 docs/flow-patterns.md。
+ * 工具集来自 FlowRuntime.allTools（app-ts 通用 + flow 自补 bash/fs/search/demo/mcp-bridge + native MCP）。
+ * 状态用标准消息流（MessagesAnnotation），自动进 FileCheckpointSaver（跨重启恢复 + interrupt/resume）。
  *
- * ⚠️ 节点名不能与 state channel 同名(LangGraph 限制):判定节点叫 reflect(channel 叫 decision)、
- *    思考节点叫 think(channel 叫 plan)。
- * 想改编排?改下面的 addNode / addEdge / addConditionalEdges 即可。真实业务流范例见 examples/rag/。
+ * CreateFlowGraphConfig 是 FlowRuntime 的**结构子集** —— getFlowTopology 反射拓扑时传最小子集
+ * （空 tools + MemorySaver），不加载 MCP、不需要凭证、不 invoke 节点。
  */
 
-import { StateGraph, START, END, Annotation } from "@langchain/langgraph";
-import { BaseMessage } from "@langchain/core/messages";
-import { logger, type AppConfig } from "deepagents-app-ts/runtime";
-import { prepareNode } from "./nodes/prepare.js";
-import { thinkNode } from "./nodes/think.js";
-import { actNode } from "./nodes/act.js";
-import { observeNode } from "./nodes/observe.js";
-import { reflectNode, routeAfterReflect } from "./nodes/reflect.js";
-import { respondNode } from "./nodes/respond.js";
-import type { Observation, PlanStep } from "./state.js";
-import type { ToolCallEvent } from "../surfaces/flow-types.js";
+import {
+  StateGraph,
+  START,
+  END,
+  MemorySaver,
+  type BaseCheckpointSaver,
+} from "@langchain/langgraph";
+import { ToolNode, toolsCondition } from "@langchain/langgraph/prebuilt";
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+  type BaseMessage,
+} from "@langchain/core/messages";
+import type { StructuredTool } from "@langchain/core/tools";
+import { resolveModel, logger, type AppConfig } from "deepagents-app-ts/runtime";
+import { FlowStateAnnotation, type FlowState } from "./state.js";
+import type { FlowCallbacks } from "../surfaces/flow-types.js";
 
 const log = logger.child("flow-graph");
 
-/** 图的 channels(与 FlowState 字段对齐)。 */
-const FlowStateAnnotation = Annotation.Root({
-  input: Annotation<string>,
-  history: Annotation<BaseMessage[]>,
-  attempts: Annotation<number>,
-  decision: Annotation<string>,
-  plan: Annotation<PlanStep | null>,
-  pendingResult: Annotation<Observation | null>,
-  observations: Annotation<Observation[]>,
-  steps: Annotation<string[]>,
-  output: Annotation<string>,
-});
-
-type FlowStateType = typeof FlowStateAnnotation.State;
-
-export interface FlowCallbacks {
-  onToken?: (token: string) => void | Promise<void>;
-  onToolCall?: (e: ToolCallEvent) => void | Promise<void>;
-}
-
 export interface CreateFlowGraphConfig {
-  appConfig?: AppConfig;
+  /** 绑给 think 的工具集（FlowRuntime.allTools）；反射拓扑时可空。 */
+  allTools?: StructuredTool[];
+  /** checkpointer（FlowRuntime.checkpointer）；反射拓扑时默认 MemorySaver。 */
+  checkpointer?: BaseCheckpointSaver;
+  /** AppConfig（resolveModel 用）；反射拓扑时可空。 */
+  config?: AppConfig;
+  /** 系统提示词（think 注入 SystemMessage）。 */
+  systemPrompt?: string;
   callbacks?: FlowCallbacks;
 }
 
-/** 创建默认 flow 图(编译后的 LangGraph 图)。 */
+type BoundModel = { invoke: (m: BaseMessage[]) => Promise<AIMessage> };
+
+function withSystemPrompt(messages: BaseMessage[], systemPrompt: string): BaseMessage[] {
+  if (!systemPrompt) return messages;
+  if (messages.length > 0 && messages[0]?._getType?.() === "system") return messages;
+  return [new SystemMessage(systemPrompt), ...messages];
+}
+
+/** 是否存在任一可用模型凭证（无则 think 走 fallback，不 invoke 模型）。 */
+function hasCredentials(config?: AppConfig): boolean {
+  const vars = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"];
+  if (config?.model.apiKeyEnv) vars.push(config.model.apiKeyEnv);
+  if (config?.model.authTokenEnv) vars.push(config.model.authTokenEnv);
+  return vars.some((v) => Boolean(process.env[v]));
+}
+
 export function createFlowGraph(config: CreateFlowGraphConfig = {}) {
-  const { appConfig, callbacks } = config;
+  const { allTools = [], checkpointer = new MemorySaver(), callbacks } = config;
+
+  const hasCreds = hasCredentials(config.config);
+  let boundModel: BoundModel | null = null;
+  if (config.config && hasCreds) {
+    try {
+      const raw = resolveModel(config.config);
+      if (raw && typeof raw !== "string") {
+        boundModel = (
+          raw as unknown as { bindTools: (t: StructuredTool[]) => BoundModel }
+        ).bindTools(allTools);
+      }
+    } catch (err) {
+      log.warn("resolveModel/bindTools failed", { error: String(err) });
+    }
+  }
+
+  // prepare：首次把 input 转 HumanMessage 加入 messages（历史由 checkpointer 恢复）。
+  // W5 上下文压缩在此接入（compactHistory）。
+  const prepareNode = async (state: FlowState): Promise<Partial<FlowState>> => {
+    if (!state.input) return {};
+    return { messages: [new HumanMessage(state.input)] };
+  };
+
+  // think：bindTools 的模型决定调工具（AIMessage.tool_calls）还是直接回答。
+  const thinkNode = async (state: FlowState): Promise<Partial<FlowState>> => {
+    if (!boundModel || !hasCreds) {
+      // 无凭证 fallback：直接回显输入为回答（不调工具，保证图始终可跑）
+      return {
+        messages: [new AIMessage({ content: `(无模型凭证，回显输入)\n${state.input}` })],
+        steps: ["think#fallback: no model"],
+      };
+    }
+    const ai = await boundModel.invoke(withSystemPrompt(state.messages, config.systemPrompt ?? ""));
+    return {
+      messages: [ai],
+      steps: [`think: ${(ai.tool_calls ?? []).length} tool_calls`],
+    };
+  };
+
+  // tools：ToolNode 执行 + onToolCall 三态透出（in_progress → completed/failed）。
+  const toolNode = new ToolNode(allTools);
+  const toolsNode = async (state: FlowState): Promise<Partial<FlowState>> => {
+    const last = state.messages[state.messages.length - 1] as AIMessage;
+    const calls = (last?.tool_calls ?? []) as Array<{
+      id?: string;
+      name: string;
+      args: Record<string, unknown>;
+    }>;
+    for (const c of calls) {
+      if (callbacks?.onToolCall && c.id) {
+        await callbacks.onToolCall({
+          toolCallId: c.id,
+          toolName: c.name,
+          args: c.args,
+          status: "in_progress",
+        });
+      }
+    }
+    const result = (await toolNode.invoke({ messages: state.messages })) as {
+      messages?: ToolMessage[];
+    };
+    const toolMsgs = result?.messages ?? [];
+    for (const tm of toolMsgs) {
+      if (callbacks?.onToolCall) {
+        const failed = tm.status === "error";
+        const text = typeof tm.content === "string" ? tm.content : JSON.stringify(tm.content);
+        await callbacks.onToolCall({
+          toolCallId: tm.tool_call_id,
+          toolName: tm.name ?? "",
+          args: {},
+          status: failed ? "failed" : "completed",
+          ...(failed ? { error: text } : { result: text }),
+        });
+      }
+    }
+    return { messages: toolMsgs, steps: toolMsgs.map((t) => `tool:${t.name ?? "?"}`) };
+  };
+
+  // respond：取最后 AIMessage 文本，经 onToken 流式发 + 设 output。
+  const respondNode = async (state: FlowState): Promise<Partial<FlowState>> => {
+    const last = state.messages[state.messages.length - 1];
+    const text = last && typeof last.content === "string" ? (last.content as string) : "";
+    if (text && callbacks?.onToken) await callbacks.onToken(text);
+    return { output: text, steps: ["respond"] };
+  };
+
   const graph = new StateGraph(FlowStateAnnotation)
-    .addNode("prepare", (s: FlowStateType) => prepareNode(s))
-    .addNode("think", async (s: FlowStateType) => thinkNode(s, appConfig))
-    .addNode("act", async (s: FlowStateType) => actNode(s, callbacks?.onToolCall))
-    .addNode("observe", (s: FlowStateType) => observeNode(s))
-    .addNode("reflect", async (s: FlowStateType) => reflectNode(s, appConfig))
-    .addNode("respond", async (s: FlowStateType) =>
-      respondNode(s, appConfig, callbacks?.onToken)
-    )
+    .addNode("prepare", prepareNode)
+    .addNode("think", thinkNode)
+    .addNode("tools", toolsNode)
+    .addNode("respond", respondNode)
     .addEdge(START, "prepare")
     .addEdge("prepare", "think")
-    .addEdge("think", "act")
-    .addEdge("act", "observe")
-    .addEdge("observe", "reflect")
-    .addConditionalEdges("reflect", routeAfterReflect, {
-      think: "think",
-      respond: "respond",
+    .addConditionalEdges("think", toolsCondition, {
+      tools: "tools",
+      [END]: "respond",
     })
-    .addEdge("respond", END);
+    .addEdge("tools", "think")
+    .addEdge("respond", END)
+    .compile({ checkpointer });
 
-  log.info(
-    "Flow graph compiled: START → prepare → think → act → observe → reflect →(cond) think|respond → END"
-  );
-  return graph.compile();
+  log.info("Flow graph compiled: prepare → think ↔ tools → respond (LangGraph ReAct)", {
+    tools: allTools.length,
+  });
+  return graph;
 }
 
-/** 跑一次默认 flow。 */
+/** 跑一次默认 flow（one-shot，每次新 thread；续接历史走 StatefulFlow）。 */
 export async function executeFlow(
   input: string,
-  options: { appConfig?: AppConfig; history?: BaseMessage[] } & FlowCallbacks = {}
-): Promise<{ output: string; steps: string[]; observations: Observation[] }> {
-  const graph = createFlowGraph({
-    appConfig: options.appConfig,
-    callbacks: { onToken: options.onToken, onToolCall: options.onToolCall },
-  });
-  const result = await graph.invoke({ input, history: options.history ?? [] });
-  return {
-    output: result.output ?? "",
-    steps: (result.steps ?? []) as string[],
-    observations: (result.observations ?? []) as Observation[],
-  };
+  deps: {
+    allTools: StructuredTool[];
+    checkpointer: BaseCheckpointSaver;
+    config: AppConfig;
+    systemPrompt: string;
+  },
+  callbacks: FlowCallbacks = {}
+): Promise<{ output: string; steps: string[] }> {
+  const graph = createFlowGraph({ ...deps, callbacks });
+  const threadId =
+    typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+  const result = (await graph.invoke(
+    { input, messages: [] } as unknown as FlowState,
+    { configurable: { thread_id: threadId } }
+  )) as FlowState;
+  return { output: result.output ?? "", steps: result.steps ?? [] };
 }
-
-export { FlowStateAnnotation };
-export type { FlowStateType };
