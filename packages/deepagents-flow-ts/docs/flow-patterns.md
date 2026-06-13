@@ -91,3 +91,18 @@ await graph.invoke({ input: "..." }, { configurable: { thread_id: "t1" } });
 ---
 
 **何时该读这里**:默认图是顺序 ReAct 式(够覆盖大多数编排)。一旦你要 **并行处理多路、需要人审、动态多分支路由、复用整张子图、或要断点续跑** ——回来看对应小节。每段都是最小可抄片段;贴进 `graph.ts` 的连线和节点即可。
+
+---
+
+## 可跑示例对照
+
+文档里的模式，下面这些示例已经落成**可跑代码**（不只是片段）：
+
+| 模式 | 可跑示例 |
+|---|---|
+| `Send` 并行 map-reduce + reducer | [examples/travel-planner](../examples/travel-planner/)（并行 research 4 路 + 聚合） |
+| `interrupt` 人审 / HITL | [examples/human-in-loop](../examples/human-in-loop/)、[travel-planner](../examples/travel-planner/)、[project-manager](../examples/project-manager/) |
+| 条件边循环（评估重试） | [examples/project-manager](../examples/project-manager/)、默认图 `reflect` |
+
+> `interrupt` 的"采集回复 → resume"已由模板的 **`StatefulFlow`** seam 在 acp/cli surface 接好——
+> 不用自己写 host 端恢复逻辑（见各示例的 `createXxxFlow`）。
