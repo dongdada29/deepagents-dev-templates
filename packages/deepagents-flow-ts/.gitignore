@@ -4,13 +4,6 @@ node_modules/
 # Build output
 dist/
 
-# Python
-__pycache__/
-*.pyc
-*.egg-info/
-.pytest_cache/
-.ruff_cache/
-
 # Environment variables
 .env
 .env.local
@@ -37,13 +30,9 @@ coverage/
 
 # Package artifacts
 *.tgz
+dist-packages/
 agent-package.release.json
+package-checksums.json
 
-zip/
-
-logs/
-.agent-checkpoints/
-.agent-memory/
-
-# superpowers brainstorm mockups
-.superpowers/
+# Flow session persistence (FileCheckpointSaver)
+.flow-sessions/

@@ -1,0 +1,75 @@
+{
+  "agent": {
+    "name": "deepagents-flow-ts",
+    "description": "通用工作流编排模板 — Agent 按显式 LangGraph 节点图运行（默认 ReAct：prepare → think ↔ tools → respond）。工具/会话/压缩/Skills/Subagent 经框架原生能力 + 能力分层配置驱动，对接 nuwax 平台编排。",
+    "version": "0.1.0",
+    "outputStyle": "concise",
+    "systemPromptPath": "prompts/flow.base.md",
+    "includeWorkspaceInstructions": true
+  },
+  "model": {
+    "provider": "anthropic",
+    "name": "claude-sonnet-4-6",
+    "settings": {
+      "temperature": 0,
+      "maxTokens": 16384
+    }
+  },
+  "mcp": {
+    "configPath": "./config/mcp.default.json",
+    "mergeStrategy": "session-wins"
+  },
+  "platform": {
+    "apiBaseUrl": "https://api.nuwax.com",
+    "agentId": "",
+    "spaceId": ""
+  },
+  "permissions": {
+    "mode": "ask",
+    "interruptOn": ["write_file", "edit_file", "execute"],
+    "allowedPaths": ["src/app/", "prompts/", "skills/", "config/", "examples/", ".agents/"],
+    "deniedPaths": ["src/runtime/", "src/surfaces/"]
+  },
+  "sandbox": {
+    "profile": "workspace-write",
+    "writablePaths": ["src/app/", "prompts/", "skills/", "config/", "examples/", ".agents/"],
+    "deniedWritePaths": ["src/runtime/", "src/surfaces/"]
+  },
+  "skills": {
+    "directories": ["./skills/builtin/", "./skills/platform/"],
+    "progressiveLoading": true
+  },
+  "agentsDirectories": ["./.agents"],
+  "memory": {
+    "enabled": true,
+    "dir": "./.flow-sessions",
+    "addCacheControl": true
+  },
+  "logging": {
+    "level": "info",
+    "structured": true
+  },
+  "compaction": {
+    "enabled": true,
+    "contextWindow": 200000,
+    "triggerThreshold": 0.8,
+    "reserveTokens": 16384,
+    "keepRecentTokens": 20000
+  },
+  "middleware": {
+    "stuckLoopDetection": {
+      "enabled": true,
+      "threshold": 3,
+      "mode": "warn"
+    },
+    "periodicReminder": {
+      "enabled": true,
+      "firstAt": 5,
+      "every": 10
+    },
+    "costTracking": {
+      "enabled": true,
+      "warnAtTokens": 100000
+    }
+  }
+}
