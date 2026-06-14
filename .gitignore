@@ -40,6 +40,7 @@ coverage/
 agent-package.release.json
 
 zip/
+examples/
 
 logs/
 .agent-checkpoints/
