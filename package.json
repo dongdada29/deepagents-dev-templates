@@ -7,10 +7,10 @@
   ],
   "packageManager": "pnpm@9.15.5",
   "scripts": {
-    "build": "pnpm --filter deepagents-app-ts build",
-    "test": "pnpm --filter deepagents-app-ts test",
+    "build": "pnpm --filter deepagents-app-ts build && pnpm --filter deepagents-flow-ts build && pnpm --filter inspector build",
+    "test": "pnpm --filter deepagents-app-ts test && pnpm --filter deepagents-flow-ts test && pnpm --filter inspector test",
     "dev": "pnpm --filter deepagents-app-ts dev",
-    "typecheck": "pnpm --filter deepagents-app-ts typecheck",
+    "typecheck": "pnpm --filter deepagents-app-ts typecheck && pnpm --filter deepagents-flow-ts typecheck",
     "graph": "pnpm --filter deepagents-app-ts graph",
     "inspect": "pnpm --filter inspector inspect --",
     "pack": "node scripts/pack-template.js",

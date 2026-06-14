@@ -22,6 +22,8 @@ const hasCreds = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"]
   (k) => Boolean(process.env[k])
 );
 
+const runIntegration = process.env.RUN_INTEGRATION === "1" && hasCreds;
+
 const st = (o: Partial<TravelStateType>): TravelStateType => ({
   query: "",
   destination: "",
@@ -59,7 +61,7 @@ describe("travel gather / fanout (纯函数, 无凭证)", () => {
 });
 
 // 真实接入：免 key 的 DuckDuckGo MCP 网络搜索 + LLM 整理。需凭证 + 网络。
-describe.skipIf(!hasCreds)(
+describe.skipIf(!runIntegration)(
   "travel-planner flow (真实 MCP 搜索 + LLM, map-reduce + HITL)",
   () => {
     const { appConfig } = loadFlowConfig();

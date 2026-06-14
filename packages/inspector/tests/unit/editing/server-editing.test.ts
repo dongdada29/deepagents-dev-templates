@@ -13,7 +13,7 @@ let handle: InspectServerHandle;
 const CFG = "config/app-agent.config.json";
 
 beforeEach(async () => {
-  const templateRoot = resolve(process.cwd(), "../template");
+  const templateRoot = resolve(process.cwd(), "../deepagents-app-ts");
   root = mkdtempSync(join(tmpdir(), "inspector-srv-"));
   mkdirSync(join(root, "config"), { recursive: true });
   mkdirSync(join(root, "prompts"), { recursive: true });

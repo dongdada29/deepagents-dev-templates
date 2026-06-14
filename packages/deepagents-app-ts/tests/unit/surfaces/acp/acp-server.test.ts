@@ -3,6 +3,14 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../../../../src/runtime/config/config-loader.js";
+
+// resolveModel instantiates a real ChatAnthropic/ChatOpenAI; mock it to avoid
+// requiring credentials in unit tests that only verify config/permission assembly.
+vi.mock("../../../../src/runtime/model.js", () => ({
+  resolveModel: () => ({ invoke: async () => ({ content: "" }) }),
+  resolveModelString: (config: { model: { provider: string; name: string } }) =>
+    `${config.model.provider}:${config.model.name}`,
+}));
 import { buildACPAgentConfig, loadSessionConfigFromEnv } from "../../../../src/surfaces/acp/server.js";
 import { createRuntimeContextAsync, discoverMemoryFiles, resolveSkillsPaths, resolveSystemPrompt } from "../../../../src/runtime/helpers.js";
 

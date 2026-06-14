@@ -103,6 +103,7 @@ await graph.invoke({ input: "..." }, { configurable: { thread_id: "t1" } });
 | `Send` 并行 map-reduce + reducer | [examples/travel-planner](../examples/travel-planner/)（并行 research 4 路 + 聚合） |
 | `interrupt` 人审 / HITL | [examples/human-in-loop](../examples/human-in-loop/)、[travel-planner](../examples/travel-planner/)、[project-manager](../examples/project-manager/) |
 | 条件边循环（评估重试） | [examples/project-manager](../examples/project-manager/)、默认图 `reflect` |
+| 多阶段流水线 + 多轮 HITL + 双层 reflection + 并行调研 | [examples/deep-research](../examples/deep-research/)（长任务示例：选题确认 → 大纲规划 → Send 并行调研 → 初稿生成 → 质量评审 → 定稿，3 轮 interrupt + 2 个 reflection 循环） |
 
 > `interrupt` 的"采集回复 → resume"已由模板的 **`StatefulFlow`** seam 在 acp/cli surface 接好——
 > 不用自己写 host 端恢复逻辑（见各示例的 `createXxxFlow`）。

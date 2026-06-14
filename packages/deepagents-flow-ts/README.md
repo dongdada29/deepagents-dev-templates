@@ -43,6 +43,7 @@ human-in-the-loop，可 `interrupt` 暂停→等用户→`resume`）。下面四
 | [examples/project-manager](examples/project-manager/) | 分解-评估-审批 | 评估循环 + HITL | reflection 回边 + 条件边 | stateful |
 | [examples/human-in-loop](examples/human-in-loop/) | 生成→人审→定稿 | 线性 + 中途暂停 | `interrupt` + `Command(resume)` | stateful |
 | [examples/dev-agent](examples/dev-agent/) | 综合能力展示 | 标准 ReAct + subgraph | bindTools/ToolNode/FileCheckpointSaver/compactHistory/subgraph | stateful |
+| [examples/deep-research](examples/deep-research/) | 深度研究报告（长任务） | 多阶段流水线 + 双层 reflection | 3 轮 HITL + Send 并行调研 + 条件边循环 | stateful |
 
 每个示例都**不重写** surface plumbing：写自己的图 + 节点 → 包成 `FlowExecutor`/`StatefulFlow` →
 插进同一套 `bootstrapFlowAcp`/`runFlowCli`。

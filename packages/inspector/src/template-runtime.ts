@@ -130,10 +130,25 @@ export async function loadTemplateRuntime(): Promise<TemplateRuntime> {
     return cachedRuntime;
   }
 
-  if (process.env.INSPECTOR_TEMPLATE_SOURCE === "1") {
-    const sourceSpecifier = "../../template/src/runtime/index.js";
-    cachedRuntime = (await import(sourceSpecifier)) as unknown as TemplateRuntime;
-  } else {
+ if (process.env.INSPECTOR_TEMPLATE_SOURCE === "1") {
+    // Source-dev mode: load the template runtime from the actual template package
+    // source. In published layouts this is packages/template/; in the workspace
+    // it is packages/deepagents-app-ts/ (the symlink "template" causes pnpm
+    // workspace-name conflicts, so we resolve to the real package directly).
+    // Using import.meta.url keeps the path correct under tsx and vitest alike.
+    const { fileURLToPath } = await import("node:url");
+    const { resolve } = await import("node:path");
+    const here = fileURLToPath(import.meta.url);
+    // src/template-runtime.ts → ../ (packages/inspector/src) → ../../ (packages/inspector) → ../../../ (packages)
+    const packagesDir = resolve(here, "../../../");
+    // Prefer packages/template (published layout), fall back to deepagents-app-ts.
+    const { existsSync } = await import("node:fs");
+    const templateSrc = resolve(packagesDir, "template/src/runtime/index.js");
+    const fallbackSrc = resolve(packagesDir, "deepagents-app-ts/src/runtime/index.ts");
+    cachedRuntime = (await import(
+      existsSync(templateSrc) ? templateSrc : fallbackSrc
+    )) as unknown as TemplateRuntime;
+ } else {
     const packageSpecifier = "deepagents-dev-templates/runtime";
     cachedRuntime = (await import(packageSpecifier)) as unknown as TemplateRuntime;
   }

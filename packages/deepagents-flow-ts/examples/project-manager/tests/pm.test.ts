@@ -21,6 +21,8 @@ const hasCreds = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"]
   (k) => Boolean(process.env[k])
 );
 
+const runIntegration = process.env.RUN_INTEGRATION === "1" && hasCreds;
+
 describe("routeAfterEvaluate (条件边, 纯函数, 无凭证)", () => {
   const s = (o: Partial<PMStateType>): PMStateType => ({
     goal: "x",
@@ -49,7 +51,7 @@ describe("routeAfterEvaluate (条件边, 纯函数, 无凭证)", () => {
   });
 });
 
-describe.skipIf(!hasCreds)("project-manager flow (真实 LLM 评估循环 + HITL)", () => {
+describe.skipIf(!runIntegration)("project-manager flow (真实 LLM 评估循环 + HITL)", () => {
   const { appConfig } = loadFlowConfig();
 
   it("拆解 → 估时 → 评估 → interrupt 出计划", async () => {

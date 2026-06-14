@@ -17,6 +17,8 @@ const hasCreds = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "OPENAI_API_KEY"]
   (k) => Boolean(process.env[k])
 );
 
+const runIntegration = process.env.RUN_INTEGRATION === "1" && hasCreds;
+
 describe("isApproval (纯函数, 无凭证)", () => {
   it("空回复 / 通过词 → 通过", () => {
     for (const fb of ["", "  ", "ok", "OK", "通过", "可以", "lgtm", "好的"]) {
@@ -30,7 +32,7 @@ describe("isApproval (纯函数, 无凭证)", () => {
   });
 });
 
-describe.skipIf(!hasCreds)("human-in-loop review flow (真实 LLM + HITL)", () => {
+describe.skipIf(!runIntegration)("human-in-loop review flow (真实 LLM + HITL)", () => {
   const { appConfig } = loadFlowConfig();
 
   it("首跑到 interrupt：返回带草稿的问题", async () => {

@@ -9,7 +9,7 @@
     "deepagents-inspect": "dist/cli/inspect.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc",
     "dev": "INSPECTOR_TEMPLATE_SOURCE=1 tsx src/cli/inspect.ts",
     "inspect": "INSPECTOR_TEMPLATE_SOURCE=1 tsx src/cli/inspect.ts",
     "test": "INSPECTOR_TEMPLATE_SOURCE=1 vitest run"

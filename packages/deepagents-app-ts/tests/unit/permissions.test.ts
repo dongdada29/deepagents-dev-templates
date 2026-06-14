@@ -9,7 +9,15 @@
  *    semantics in deepagents' decidePathAccess)
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// resolveModel instantiates a real ChatAnthropic/ChatOpenAI; these tests only
+// verify permission/sandbox rules, so mock the model module to avoid requiring credentials.
+vi.mock("../../src/runtime/model.js", () => ({
+  resolveModel: () => ({ invoke: async () => ({ content: "" }) }),
+  resolveModelString: (config: { model: { provider: string; name: string } }) =>
+    `${config.model.provider}:${config.model.name}`,
+}));
 import { buildPermissions, buildAgentConfigParts, resolveSandboxPolicy } from "../../src/runtime/helpers.js";
 import type { AppConfig } from "../../src/runtime/config/config-loader.js";
 
